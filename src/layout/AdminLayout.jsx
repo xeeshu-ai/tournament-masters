@@ -16,7 +16,7 @@ const navItems = [
   { to: '/complaints', label: 'Complaints' },
 ];
 
-export function AdminLayout({ user }) {
+export function AdminLayout({ user, children }) {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -92,6 +92,7 @@ export function AdminLayout({ user }) {
             </div>
           </header>
           <div className="px-4 py-4">
+  {children}
             <Outlet />
           </div>
         </main>
