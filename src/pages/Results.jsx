@@ -77,18 +77,60 @@ export function ResultsPage() {
   };
 
   const handleSaveBr = async () => {
-    if (!selected) return;
-    setStatus('saving');
-    const payload = brRows.map((r) => ({
-      tournament_id: selected.id,
-      team_name: r.team_name,
-      kills: Number(r.kills || 0),
-      position: Number(r.position || 0),
-      points: r.points,
-    }));
-    await supabaseAdmin.from('long_br_match_scores').upsert(payload);
+  if (!selected) return;
+  setStatus('saving');
+
+  // Step 1: Get or create the match row for this tournament
+  const { data: matchData, error: matchErr } = await supabaseAdmin
+    .from('long_br_matches')
+    .upsert(
+      { tournament_id: selected.id, match_number: 1 },
+      { onConflict: 'tournament_id,match_number' },
+    )
+    .select('id')
+    .single();
+
+  if (matchErr || !matchData) {
+    console.error(matchErr);
+    notify('Failed to create match record.', 'error');
     setStatus('idle');
-  };
+    return;
+  }
+
+  // Step 2: Upsert scores linked to that match
+  const payload = brRows.map((r) => ({
+    match_id: matchData.id,
+    team_name: r.team_name,
+    kills: Number(r.kills || 0),
+    position: Number(r.position || 0),
+    points: r.points,
+  }));
+
+  const { error: scoresErr } = await supabaseAdmin
+    .from('long_br_match_scores')
+    .upsert(payload, { onConflict: 'match_id,team_name' });
+
+  if (scoresErr) {
+    console.error(scoresErr);
+    notify('Failed to save scores.', 'error');
+    setStatus('idle');
+    return;
+  }
+
+  // Step 3: Save winner announcement + notify players
+  if (winnerText.trim()) {
+    await supabaseAdmin
+      .from('tournaments')
+      .update({ winner_text: winnerText.trim() })
+      .eq('id', selected.id);
+
+    const playerIds = brRows.map((r) => r.host_player_id);
+    await notifyPlayers(playerIds, winnerText.trim());
+  }
+
+  notify('Results saved. Players notified.');
+  setStatus('idle');
+};
 
   const unlocked = selected && unlockedIds.includes(selected.id);
   const isSingleBR = selected && selected.type === 'single' && selected.mode === 'br';
