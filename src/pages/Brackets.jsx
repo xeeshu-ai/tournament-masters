@@ -1,4 +1,3 @@
-
 import React from 'react';
 // ✅ Fix — use named imports
 import { supabaseAdmin } from '../supabaseClient';
@@ -168,7 +167,6 @@ export function BracketManagerPage() {
   };
 
   const recomputeNextRounds = async (tid, baseMatches) => {
-    // Build rounds progressively client-side and then sync to Supabase.
     const rounds = {};
     baseMatches.forEach((m) => {
       if (!rounds[m.round_number]) rounds[m.round_number] = [];
@@ -211,7 +209,6 @@ export function BracketManagerPage() {
       }
     }
 
-    // Replace matches in Supabase for this tournament
     await supabaseAdmin.from('long_br_matches').delete().eq('tournament_id', tid);
     if (allMatches.length) {
       await supabaseAdmin.from('long_br_matches').insert(allMatches);
@@ -219,10 +216,10 @@ export function BracketManagerPage() {
   };
 
   const handleWinnerChange = async (match, winnerId) => {
+    // winnerId is a UUID string — do NOT cast to Number()
     if (!winnerId) return;
     setSaving(true);
 
-    // Update this match
     const { error } = await supabaseAdmin
       .from('long_br_matches')
       .update({ winner_registration_id: winnerId })
@@ -235,7 +232,6 @@ export function BracketManagerPage() {
       return;
     }
 
-    // Reload matches and regenerate downstream rounds
     const { data: matches, error: matchErr } = await supabaseAdmin
       .from('long_br_matches')
       .select('*')
@@ -301,8 +297,10 @@ export function BracketManagerPage() {
           </div>
         </div>
         <p className="text-11px text-slate-500">
-          Fixtures are created from confirmed <code className="mx-1 rounded bg-slate-900 px-1 py-0.5">tournament_registrations</code>
-          . Winners advance automatically when you pick them, and later rounds are rebuilt when you change an earlier winner.
+          Fixtures are created from confirmed{' '}
+          <code className="mx-1 rounded bg-slate-900 px-1 py-0.5">tournament_registrations</code>.
+          Winners advance automatically when you pick them, and later rounds are rebuilt when you
+          change an earlier winner.
         </p>
       </section>
 
@@ -312,7 +310,9 @@ export function BracketManagerPage() {
           <p className="text-11px text-slate-400">No fixtures yet. Generate Round 1 to begin.</p>
         )}
         {!loading && !selectedId && (
-          <p className="text-11px text-slate-400">Select a tournament to view or generate its bracket.</p>
+          <p className="text-11px text-slate-400">
+            Select a tournament to view or generate its bracket.
+          </p>
         )}
         {!loading &&
           roundNumbers.map((round) => (
@@ -322,29 +322,33 @@ export function BracketManagerPage() {
                 {matchesByRound[round].map((m) => (
                   <div key={m.id} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
                     <p className="text-11px text-slate-500">Match {m.match_number}</p>
-                    <div className="mt-2 space-y-1 text-slate-100">
-                      <p>A: #{m.team_a_registration_id}</p>
-                      <p>B: #{m.team_b_registration_id}</p>
+                    <div className="mt-2 space-y-1 font-mono text-slate-100">
+                      <p>A: {m.team_a_registration_id}</p>
+                      <p>B: {m.team_b_registration_id}</p>
                     </div>
                     <div className="mt-3">
                       <label className="label" htmlFor={`winner-${m.id}`}>
-                        Winner registration ID
+                        Winner registration UUID
                       </label>
                       <input
                         id={`winner-${m.id}`}
-                        className="input text-11px"
-                        placeholder="Paste winner registration id"
+                        className="input font-mono text-11px"
+                        placeholder="Paste winner registration UUID"
                         defaultValue={m.winner_registration_id || ''}
                         onBlur={(e) => {
+                          // ✅ Pass raw UUID string — do NOT wrap with Number()
                           const value = e.target.value.trim();
-                          if (value && value !== String(m.winner_registration_id || '')) {
-                            handleWinnerChange(m, Number(value));
+                          if (value && value !== (m.winner_registration_id || '')) {
+                            handleWinnerChange(m, value);
                           }
                         }}
                       />
                       <p className="mt-1 text-11px text-slate-500">
-                        Use the registration IDs from the <code className="mx-1 rounded bg-slate-900 px-1 py-0.5">tournament_registrations</code>
-                        {' '}table.
+                        Copy the UUID from the{' '}
+                        <code className="mx-1 rounded bg-slate-900 px-1 py-0.5">
+                          tournament_registrations
+                        </code>{' '}
+                        table.
                       </p>
                     </div>
                   </div>
