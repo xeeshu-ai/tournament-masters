@@ -43,6 +43,8 @@ export function BracketManagerPage() {
       return;
     }
     setLoading(true);
+
+    // Load the bracket row for this tournament
     const { data: bracketRow, error: bracketErr } = await supabaseAdmin
       .from('long_brackets')
       .select('*')
@@ -54,22 +56,28 @@ export function BracketManagerPage() {
     }
     setBracket(bracketRow || null);
 
-    const { data: matches, error: matchErr } = await supabaseAdmin
-      .from('long_br_matches')
-      .select('*')
-      .eq('tournament_id', tid)
-      .order('round_number', { ascending: true })
-      .order('match_number', { ascending: true });
-    if (matchErr) {
-      // eslint-disable-next-line no-console
-      console.error(matchErr);
+    // ✅ Fix: long_br_matches has no tournament_id column — query via bracket_id
+    if (bracketRow) {
+      const { data: matches, error: matchErr } = await supabaseAdmin
+        .from('long_br_matches')
+        .select('*')
+        .eq('bracket_id', bracketRow.id)
+        .order('round_number', { ascending: true })
+        .order('match_number', { ascending: true });
+      if (matchErr) {
+        // eslint-disable-next-line no-console
+        console.error(matchErr);
+      }
+      const grouped = {};
+      (matches || []).forEach((m) => {
+        if (!grouped[m.round_number]) grouped[m.round_number] = [];
+        grouped[m.round_number].push(m);
+      });
+      setMatchesByRound(grouped);
+    } else {
+      setMatchesByRound({});
     }
-    const grouped = {};
-    (matches || []).forEach((m) => {
-      if (!grouped[m.round_number]) grouped[m.round_number] = [];
-      grouped[m.round_number].push(m);
-    });
-    setMatchesByRound(grouped);
+
     setLoading(false);
   };
 
@@ -131,18 +139,18 @@ export function BracketManagerPage() {
       return;
     }
 
-    // Clear any existing matches for safety
+    // ✅ Fix: delete existing matches via bracket_id, not tournament_id
     await supabaseAdmin
       .from('long_br_matches')
       .delete()
-      .eq('tournament_id', selectedId);
+      .eq('bracket_id', bracketRow.id);
 
+    // ✅ Fix: insert matches with bracket_id only — no tournament_id column on this table
     const round1 = [];
     for (let i = 0; i < shuffled.length; i += 2) {
       const a = shuffled[i];
       const b = shuffled[i + 1];
       round1.push({
-        tournament_id: selectedId,
         bracket_id: bracketRow.id,
         round_number: 1,
         match_number: i / 2 + 1,
@@ -166,7 +174,7 @@ export function BracketManagerPage() {
     loadBracket(selectedId);
   };
 
-  const recomputeNextRounds = async (tid, baseMatches) => {
+  const recomputeNextRounds = async (bracketId, baseMatches) => {
     const rounds = {};
     baseMatches.forEach((m) => {
       if (!rounds[m.round_number]) rounds[m.round_number] = [];
@@ -193,9 +201,9 @@ export function BracketManagerPage() {
           const a = winners[i];
           const b = winners[i + 1];
           if (!a || !b) break;
+          // ✅ Fix: use bracket_id only, no tournament_id
           nextMatches.push({
-            tournament_id: tid,
-            bracket_id: baseMatches[0].bracket_id,
+            bracket_id: bracketId,
             round_number: nextRound,
             match_number: i / 2 + 1,
             team_a_registration_id: a,
@@ -209,7 +217,8 @@ export function BracketManagerPage() {
       }
     }
 
-    await supabaseAdmin.from('long_br_matches').delete().eq('tournament_id', tid);
+    // ✅ Fix: delete via bracket_id
+    await supabaseAdmin.from('long_br_matches').delete().eq('bracket_id', bracketId);
     if (allMatches.length) {
       await supabaseAdmin.from('long_br_matches').insert(allMatches);
     }
@@ -232,10 +241,11 @@ export function BracketManagerPage() {
       return;
     }
 
+    // ✅ Fix: reload matches via bracket_id
     const { data: matches, error: matchErr } = await supabaseAdmin
       .from('long_br_matches')
       .select('*')
-      .eq('tournament_id', selectedId)
+      .eq('bracket_id', match.bracket_id)
       .order('round_number', { ascending: true })
       .order('match_number', { ascending: true });
     if (matchErr) {
@@ -246,7 +256,7 @@ export function BracketManagerPage() {
       return;
     }
 
-    await recomputeNextRounds(selectedId, matches || []);
+    await recomputeNextRounds(match.bracket_id, matches || []);
     notify('Winner saved. Later rounds updated.');
     setSaving(false);
     loadBracket(selectedId);
