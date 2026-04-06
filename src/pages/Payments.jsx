@@ -19,7 +19,7 @@ export function PaymentsPage() {
     setLoading(true);
     const { data, error } = await supabaseAdmin
       .from('payment_requests')
-      .select('*, tournaments(title), players:host_uid(full_name, ff_uid)')
+      .select('*, tournaments(title, filled_slots), players:host_uid(full_name, ff_uid)')
       .order('created_at', { ascending: true });
     if (error) {
       // eslint-disable-next-line no-console
@@ -34,36 +34,51 @@ export function PaymentsPage() {
   }, []);
 
   const handleConfirm = async (req) => {
-    const { error } = await supabaseAdmin
+    // 1. Mark payment as confirmed
+    const { error: payErr } = await supabaseAdmin
       .from('payment_requests')
       .update({ status: 'confirmed' })
       .eq('id', req.id);
-    if (error) {
+    if (payErr) {
       // eslint-disable-next-line no-console
-      console.error(error);
+      console.error(payErr);
       notify('Failed to confirm payment.', 'error');
       return;
     }
 
-    // Ensure registration is confirmed and filled_slots incremented
-    await supabaseAdmin.from('tournament_registrations').upsert({
-      tournament_id: req.tournament_id,
-      host_player_id: req.host_player_id,
-      team_name: req.team_name,
-      status: 'confirmed',
-    });
-    await supabaseAdmin.rpc('increment_filled_slots', { tid: req.tournament_id }).catch(() => {
-      // fallback: naive increment
-      supabaseAdmin
-        .from('tournaments')
-        .update({ filled_slots: (req.tournaments?.filled_slots || 0) + 1 })
-        .eq('id', req.tournament_id);
-    });
+    // 2. Upsert registration — onConflict prevents duplicate rows
+    await supabaseAdmin
+      .from('tournament_registrations')
+      .upsert(
+        {
+          tournament_id: req.tournament_id,
+          host_player_id: req.host_player_id,
+          host_uid: req.host_uid,
+          team_name: req.team_name,
+          team_members_summary: req.team_members_summary,
+          status: 'confirmed',
+        },
+        { onConflict: 'tournament_id,host_player_id' },
+      );
 
+    // 3. Increment filled_slots safely using a fresh read to avoid stale-value race
+    const { data: fresh } = await supabaseAdmin
+      .from('tournaments')
+      .select('filled_slots')
+      .eq('id', req.tournament_id)
+      .maybeSingle();
+    await supabaseAdmin
+      .from('tournaments')
+      .update({ filled_slots: (fresh?.filled_slots || 0) + 1 })
+      .eq('id', req.tournament_id);
+
+    // 4. Notify the player — use correct schema: title, body, type
     if (req.host_player_id) {
       await supabaseAdmin.from('notifications').insert({
         player_id: req.host_player_id,
-        message: `Your payment for ${req.tournaments?.title || 'the tournament'} has been confirmed. You're in!`,
+        title: 'Payment Confirmed',
+        body: `Your payment for ${req.tournaments?.title || 'the tournament'} has been confirmed. You're in!`,
+        type: 'payment',
       });
     }
 
