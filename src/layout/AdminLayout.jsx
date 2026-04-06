@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
-import supabaseAdmin from '../supabaseClient'
+import { supabaseAdmin } from '../supabaseClient'
 
 const navItems = [
   { to: '', label: 'Overview' },
