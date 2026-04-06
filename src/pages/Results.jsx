@@ -124,8 +124,16 @@ export function ResultsPage() {
       .update({ winner_text: winnerText.trim() })
       .eq('id', selected.id);
 
-    const playerIds = brRows.map((r) => r.host_player_id);
-    await notifyPlayers(playerIds, winnerText.trim());
+    const notifyPlayers = async (playerIds, text) => {
+  if (!playerIds?.length) return;
+  const rows = playerIds.filter(Boolean).map(id => ({
+    playerid: id,
+    title: 'Tournament Result',
+    body: text,
+    type: 'tournament',
+  }));
+  if (rows.length) await supabaseAdmin.from('notifications').insert(rows);
+};
   }
 
   notify('Results saved. Players notified.');
