@@ -17,9 +17,10 @@ export function PaymentsPage() {
 
   const load = async () => {
     setLoading(true);
+    // Fix: join players via host_player_id FK, use actual column names fullname/ffuid
     const { data, error } = await supabaseAdmin
       .from('payment_requests')
-      .select('*, tournaments(title, filled_slots), players:host_uid(full_name, ff_uid)')
+      .select('*, tournaments(title, filled_slots), players!host_player_id(fullname, ffuid)')
       .order('created_at', { ascending: true });
     if (error) {
       // eslint-disable-next-line no-console
@@ -72,12 +73,14 @@ export function PaymentsPage() {
       .update({ filled_slots: (fresh?.filled_slots || 0) + 1 })
       .eq('id', req.tournament_id);
 
-    // 4. Notify the player — use correct schema: title, body, type
+    // 4. Notify the player — correct schema: player_id, title, body, type
     if (req.host_player_id) {
       await supabaseAdmin.from('notifications').insert({
         player_id: req.host_player_id,
         title: 'Payment Confirmed',
-        body: `Your payment for ${req.tournaments?.title || 'the tournament'} has been confirmed. You're in!`,
+        body: `Your payment for ${
+          req.tournaments?.title || 'the tournament'
+        } has been confirmed. You're in!`,
         type: 'payment',
       });
     }
@@ -138,7 +141,7 @@ export function PaymentsPage() {
                 <tr key={r.id}>
                   <td>{idx + 1}</td>
                   <td>{r.host_uid}</td>
-                  <td>{r.players?.full_name || '—'}</td>
+                  <td>{r.players?.fullname || '—'}</td>
                   <td>{r.tournaments?.title || '—'}</td>
                   <td>{r.team_name}</td>
                   <td>{r.team_members_summary}</td>
