@@ -1,6 +1,7 @@
 import React from 'react';
 import { supabaseAdmin } from '../supabaseClient';
 import { calculateBrPoints } from '../constants';
+import { Toast } from '../components/Toast';
 
 export function ResultsPage() {
   const [tournaments, setTournaments] = React.useState([]);
@@ -11,6 +12,12 @@ export function ResultsPage() {
   const [brRows, setBrRows] = React.useState([]);
   const [winnerText, setWinnerText] = React.useState('');
   const [status, setStatus] = React.useState('idle');
+  const [toast, setToast] = React.useState(null);
+
+  const notify = (msg, type = 'success') => {
+    setToast({ message: msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   React.useEffect(() => {
     supabaseAdmin
@@ -31,6 +38,7 @@ export function ResultsPage() {
     setBrRows(
       (data || []).map((r) => ({
         team_name: r.team_name,
+        host_player_id: r.host_player_id,
         kills: '',
         position: '',
         points: 0,
@@ -38,8 +46,9 @@ export function ResultsPage() {
     );
   };
 
+  // Fix: compare as strings — IDs are UUIDs, not numbers
   const handleSelectTournament = async (id) => {
-    setSelected(tournaments.find((t) => t.id === Number(id)) || null);
+    setSelected(tournaments.find((t) => String(t.id) === String(id)) || null);
     setPassword('');
     if (!unlockedIds.includes(id)) {
       setTeams([]);
@@ -76,75 +85,84 @@ export function ResultsPage() {
     });
   };
 
+  // Notify players via notifications table
+  const notifyPlayers = async (playerIds, text) => {
+    if (!playerIds?.length) return;
+    const rows = playerIds.filter(Boolean).map((id) => ({
+      player_id: id,              // Fix: was 'playerid' — correct column is player_id
+      title: 'Tournament Result',
+      body: text,
+      type: 'tournament',
+    }));
+    if (rows.length) await supabaseAdmin.from('notifications').insert(rows);
+  };
+
   const handleSaveBr = async () => {
-  if (!selected) return;
-  setStatus('saving');
+    if (!selected) return;
+    setStatus('saving');
 
-  // Step 1: Get or create the match row for this tournament
-  const { data: matchData, error: matchErr } = await supabaseAdmin
-    .from('long_br_matches')
-    .upsert(
-      { tournament_id: selected.id, match_number: 1 },
-      { onConflict: 'tournament_id,match_number' },
-    )
-    .select('id')
-    .single();
+    // Step 1: Get or create the match row for this tournament
+    const { data: matchData, error: matchErr } = await supabaseAdmin
+      .from('long_br_matches')
+      .upsert(
+        { tournament_id: selected.id, match_number: 1 },
+        { onConflict: 'tournament_id,match_number' },
+      )
+      .select('id')
+      .single();
 
-  if (matchErr || !matchData) {
-    console.error(matchErr);
-    notify('Failed to create match record.', 'error');
+    if (matchErr || !matchData) {
+      // eslint-disable-next-line no-console
+      console.error(matchErr);
+      notify('Failed to create match record.', 'error');
+      setStatus('idle');
+      return;
+    }
+
+    // Step 2: Upsert scores linked to that match
+    const payload = brRows.map((r) => ({
+      match_id: matchData.id,
+      team_name: r.team_name,
+      kills: Number(r.kills || 0),
+      position: Number(r.position || 0),
+      points: r.points,
+    }));
+
+    const { error: scoresErr } = await supabaseAdmin
+      .from('long_br_match_scores')
+      .upsert(payload, { onConflict: 'match_id,team_name' });
+
+    if (scoresErr) {
+      // eslint-disable-next-line no-console
+      console.error(scoresErr);
+      notify('Failed to save scores.', 'error');
+      setStatus('idle');
+      return;
+    }
+
+    // Step 3: Save winner announcement + notify players
+    if (winnerText.trim()) {
+      await supabaseAdmin
+        .from('tournaments')
+        .update({ winner_text: winnerText.trim() })
+        .eq('id', selected.id);
+
+      // Fix: actually call notifyPlayers — was defined but never invoked before
+      const playerIds = brRows.map((r) => r.host_player_id).filter(Boolean);
+      await notifyPlayers(playerIds, `Results are out for your tournament! ${winnerText.trim()}`);
+    }
+
+    notify('Results saved. Players notified.');
     setStatus('idle');
-    return;
-  }
-
-  // Step 2: Upsert scores linked to that match
-  const payload = brRows.map((r) => ({
-    match_id: matchData.id,
-    team_name: r.team_name,
-    kills: Number(r.kills || 0),
-    position: Number(r.position || 0),
-    points: r.points,
-  }));
-
-  const { error: scoresErr } = await supabaseAdmin
-    .from('long_br_match_scores')
-    .upsert(payload, { onConflict: 'match_id,team_name' });
-
-  if (scoresErr) {
-    console.error(scoresErr);
-    notify('Failed to save scores.', 'error');
-    setStatus('idle');
-    return;
-  }
-
-  // Step 3: Save winner announcement + notify players
-  if (winnerText.trim()) {
-    await supabaseAdmin
-      .from('tournaments')
-      .update({ winner_text: winnerText.trim() })
-      .eq('id', selected.id);
-
-    const notifyPlayers = async (playerIds, text) => {
-  if (!playerIds?.length) return;
-  const rows = playerIds.filter(Boolean).map(id => ({
-    playerid: id,
-    title: 'Tournament Result',
-    body: text,
-    type: 'tournament',
-  }));
-  if (rows.length) await supabaseAdmin.from('notifications').insert(rows);
-};
-  }
-
-  notify('Results saved. Players notified.');
-  setStatus('idle');
-};
+  };
 
   const unlocked = selected && unlockedIds.includes(selected.id);
   const isSingleBR = selected && selected.type === 'single' && selected.mode === 'br';
 
   return (
     <div className="space-y-4">
+      <Toast toast={toast} />
+
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-slate-50">Results entry</h1>
         <p className="text-xs text-slate-400">
