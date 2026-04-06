@@ -25,7 +25,7 @@ export function NameChangesPage() {
       .from('name_change_requests')
       .select('*, player:player_id(full_name, ff_uid, email)')
       .eq('status', 'pending')
-      .order('created_at', { ascending: true }); // oldest first
+      .order('created_at', { ascending: true });
     if (error) console.error(error);
     setPending(data || []);
     setLoadingPending(false);
@@ -52,11 +52,10 @@ export function NameChangesPage() {
     if (showReviewed) loadReviewed();
   }, [showReviewed]);
 
-  // ── APPROVE ──────────────────────────────────────────────────────────────
+  // ── APPROVE ───────────────────────────────────────────────────────────────────────
   const handleApproveConfirmed = async () => {
     const { req } = confirmApprove;
 
-    // 1. Update the player's actual display name
     const { error: playerErr } = await supabaseAdmin
       .from('players')
       .update({ full_name: req.requested_name })
@@ -68,7 +67,6 @@ export function NameChangesPage() {
       return;
     }
 
-    // 2. Mark the request as approved
     const { error: reqErr } = await supabaseAdmin
       .from('name_change_requests')
       .update({ status: 'approved' })
@@ -80,10 +78,12 @@ export function NameChangesPage() {
       return;
     }
 
-    // 3. Notify the player
+    // ✅ Fixed: use title + body + type instead of message
     await supabaseAdmin.from('notifications').insert({
       player_id: req.player_id,
-      message: `Your name change request to "${req.requested_name}" has been approved. Your profile now shows the new name.`,
+      title: 'Name Change Approved',
+      body: `Your name change request to "${req.requested_name}" has been approved. Your profile now shows the new name.`,
+      type: 'name_change',
     });
 
     notify(`Name changed to "${req.requested_name}" and player notified.`);
@@ -92,7 +92,7 @@ export function NameChangesPage() {
     if (showReviewed) loadReviewed();
   };
 
-  // ── REJECT ───────────────────────────────────────────────────────────────
+  // ── REJECT ───────────────────────────────────────────────────────────────────────
   const handleRejectConfirmed = async () => {
     const { req } = confirmReject;
     const reason = rejectionReasons[req.id]?.trim();
@@ -101,7 +101,6 @@ export function NameChangesPage() {
       return;
     }
 
-    // 1. Mark the request as rejected with reason
     const { error } = await supabaseAdmin
       .from('name_change_requests')
       .update({ status: 'rejected', rejection_reason: reason })
@@ -113,10 +112,12 @@ export function NameChangesPage() {
       return;
     }
 
-    // 2. Notify the player
+    // ✅ Fixed: use title + body + type instead of message
     await supabaseAdmin.from('notifications').insert({
       player_id: req.player_id,
-      message: `Your name change request to "${req.requested_name}" was rejected. Reason: ${reason}. You may submit a new request with a different name.`,
+      title: 'Name Change Rejected',
+      body: `Your name change request to "${req.requested_name}" was rejected. Reason: ${reason}. You may submit a new request with a different name.`,
+      type: 'name_change',
     });
 
     notify('Request rejected and player notified.');
@@ -130,7 +131,6 @@ export function NameChangesPage() {
     if (showReviewed) loadReviewed();
   };
 
-  // ── STATUS PILL ──────────────────────────────────────────────────────────
   const StatusPill = ({ status }) => (
     <span
       className={
@@ -154,9 +154,7 @@ export function NameChangesPage() {
       {/* ── PENDING ── */}
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-100">
-            Pending requests
-          </h2>
+          <h2 className="text-sm font-semibold text-slate-100">Pending requests</h2>
           <p className="text-11px text-slate-500">
             {pending.length} waiting · Oldest shown first
           </p>
@@ -235,9 +233,7 @@ export function NameChangesPage() {
 
       {/* ── REVIEWED HISTORY ── */}
       <section>
-        <details
-          onToggle={(e) => setShowReviewed(e.currentTarget.open)}
-        >
+        <details onToggle={(e) => setShowReviewed(e.currentTarget.open)}>
           <summary className="cursor-pointer text-sm font-semibold text-slate-200">
             Reviewed history (last 50)
           </summary>
@@ -286,7 +282,6 @@ export function NameChangesPage() {
         </details>
       </section>
 
-      {/* ── DIALOGS ── */}
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
       <ConfirmDialog
