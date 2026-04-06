@@ -55,8 +55,14 @@ export function PlayersPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const upsertNotification = async (playerId, message) => {
-    await supabaseAdmin.from('notifications').insert({ player_id: playerId, message });
+  // ✅ Fixed: use title + body + type columns instead of old message column
+  const upsertNotification = async (playerId, body, title = 'Account Update') => {
+    await supabaseAdmin.from('notifications').insert({
+      player_id: playerId,
+      title,
+      body,
+      type: 'account',
+    });
   };
 
   const handleApprove = async (player) => {
@@ -73,6 +79,7 @@ export function PlayersPage() {
     await upsertNotification(
       player.id,
       'Your Tournvia account has been approved. Welcome aboard!',
+      'Account Approved',
     );
     notify('Player approved.');
     loadPending();
@@ -99,6 +106,7 @@ export function PlayersPage() {
     await upsertNotification(
       player.id,
       `Your account was rejected. Reason: ${reason}. You can edit your details and resubmit.`,
+      'Account Rejected',
     );
     notify('Player rejected.');
     setConfirm({ open: false });
