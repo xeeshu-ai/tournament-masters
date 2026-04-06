@@ -53,6 +53,7 @@ export function ResultsPage() {
   const handleSelectTournament = async (id) => {
     setSelected(tournaments.find((t) => String(t.id) === String(id)) || null);
     setPassword('');
+    setWinnerText('');
     if (!unlockedIds.includes(id)) {
       setTeams([]);
       setBrRows([]);
@@ -103,11 +104,51 @@ export function ResultsPage() {
     if (!selected) return;
     setStatus('saving');
 
+    // ✅ Fix: long_br_matches has no tournament_id column.
+    // Fetch (or create) the long_brackets row first, then upsert the match via bracket_id.
+    let bracketId;
+    {
+      const { data: existingBracket, error: bracketFetchErr } = await supabaseAdmin
+        .from('long_brackets')
+        .select('id')
+        .eq('tournament_id', selected.id)
+        .maybeSingle();
+
+      if (bracketFetchErr) {
+        // eslint-disable-next-line no-console
+        console.error(bracketFetchErr);
+        notify('Failed to load bracket record.', 'error');
+        setStatus('idle');
+        return;
+      }
+
+      if (existingBracket) {
+        bracketId = existingBracket.id;
+      } else {
+        // Auto-create a bracket row for single-match BR tournaments
+        const { data: newBracket, error: bracketCreateErr } = await supabaseAdmin
+          .from('long_brackets')
+          .insert({ tournament_id: selected.id, total_rounds: 1 })
+          .select('id')
+          .single();
+
+        if (bracketCreateErr || !newBracket) {
+          // eslint-disable-next-line no-console
+          console.error(bracketCreateErr);
+          notify('Failed to create bracket record.', 'error');
+          setStatus('idle');
+          return;
+        }
+        bracketId = newBracket.id;
+      }
+    }
+
+    // Upsert the match row using bracket_id + match_number as the unique key
     const { data: matchData, error: matchErr } = await supabaseAdmin
       .from('long_br_matches')
       .upsert(
-        { tournament_id: selected.id, match_number: 1 },
-        { onConflict: 'tournament_id,match_number' },
+        { bracket_id: bracketId, round_number: 1, match_number: 1 },
+        { onConflict: 'bracket_id,match_number' },
       )
       .select('id')
       .single();
@@ -159,7 +200,8 @@ export function ResultsPage() {
 
   return (
     <div className="space-y-4">
-      <Toast toast={toast} />
+      {/* ✅ Fix: pass message/type/onClose as separate props, not a toast object */}
+      <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-slate-50">Results entry</h1>
