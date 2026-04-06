@@ -1,6 +1,4 @@
-
 import React from 'react';
-// ✅ Fix — use named imports
 import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 
@@ -58,20 +56,31 @@ export function BroadcastPage() {
       chunks.push(players.slice(i, i + chunkSize));
     }
 
+    let sentCount = 0;
     try {
       for (let i = 0; i < chunks.length; i += 1) {
         const chunk = chunks[i];
-        const rows = chunk.map((p) => ({ player_id: p.id, message: trimmed }));
+        // ✅ Fixed: use title + body + type instead of message
+        const rows = chunk.map((p) => ({
+          player_id: p.id,
+          title: 'Announcement',
+          body: trimmed,
+          type: 'broadcast',
+        }));
         const { error: insertError } = await supabaseAdmin.from('notifications').insert(rows);
         if (insertError) {
           // eslint-disable-next-line no-console
           console.error(insertError);
           throw insertError;
         }
-        setProgress(`Sent to ${Math.min((i + 1) * chunkSize, players.length)} of ${players.length} players…`);
+        sentCount = Math.min((i + 1) * chunkSize, players.length);
+        setProgress(`Sent to ${sentCount} of ${players.length} players…`);
       }
     } catch (err) {
-      notify('Failed while sending some notifications. Check console for details.', 'error');
+      notify(
+        `Broadcast partially sent (${sentCount}/${players.length} players). Check console for details.`,
+        'error',
+      );
       setSending(false);
       setProgress(null);
       return;
@@ -95,8 +104,9 @@ export function BroadcastPage() {
 
       <section className="card space-y-3 text-xs text-slate-200">
         <p>
-          This broadcast uses the same <code className="mx-1 rounded bg-slate-900 px-1 py-0.5">notifications</code> table
-          as other system messages. Each approved player receives one row with this message.
+          This broadcast uses the same{' '}
+          <code className="mx-1 rounded bg-slate-900 px-1 py-0.5">notifications</code> table as
+          other system messages. Each approved player receives one row with this message.
         </p>
         <div>
           <label className="label" htmlFor="broadcast-message">

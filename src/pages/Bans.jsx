@@ -1,10 +1,7 @@
-
 import React from 'react';
-// ✅ Fix — use named imports
 import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 
-// Helper to classify bans client-side so we don't depend on complex PostgREST filters.
 function splitBansByExpiry(bans) {
   const now = new Date();
   const active = [];
@@ -132,14 +129,16 @@ export function BanManagerPage() {
       return;
     }
 
-    // Optional notification to the player using existing notifications table shape.
+    // ✅ Fixed: use title + body + type instead of message
     try {
       await supabaseAdmin.from('notifications').insert({
         player_id: form.player_id,
-        message:
+        title: 'Account Banned',
+        body:
           form.scope === 'global'
             ? `You have been banned from Tournvia. Reason: ${form.reason.trim()}`
             : `You have been banned from a tournament on Tournvia. Reason: ${form.reason.trim()}`,
+        type: 'ban',
       });
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -226,7 +225,9 @@ export function BanManagerPage() {
             <div>
               <p className="label">Selected player</p>
               <p className="text-11px text-slate-300">
-                {form.player_id ? 'Player selected from the left list.' : 'Select a player from the left pane to continue.'}
+                {form.player_id
+                  ? 'Player selected from the left list.'
+                  : 'Select a player from the left pane to continue.'}
               </p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
@@ -314,7 +315,9 @@ export function BanManagerPage() {
               {showExpired ? 'Expired bans' : 'Active bans'}
             </h2>
             <p className="text-11px text-slate-500">
-              {showExpired ? 'Previously enforced bans for reference.' : 'Bans that are currently in effect.'}
+              {showExpired
+                ? 'Previously enforced bans for reference.'
+                : 'Bans that are currently in effect.'}
             </p>
           </div>
           <label className="inline-flex items-center gap-2 text-11px text-slate-300">
