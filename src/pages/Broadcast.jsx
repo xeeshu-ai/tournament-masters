@@ -4,7 +4,7 @@ import React from 'react';
 import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 
-export default function BroadcastPage() {
+export function BroadcastPage() {
   const [message, setMessage] = React.useState('');
   const [sending, setSending] = React.useState(false);
   const [progress, setProgress] = React.useState(null);

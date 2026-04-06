@@ -21,7 +21,7 @@ function splitBansByExpiry(bans) {
   return { active, expired };
 }
 
-export default function BanManagerPage() {
+export function BanManagerPage() {
   const [search, setSearch] = React.useState('');
   const [players, setPlayers] = React.useState([]);
   const [bans, setBans] = React.useState([]);

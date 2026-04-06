@@ -4,7 +4,7 @@ import React from 'react';
 import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 
-export default function RoomCodesPage() {
+export function RoomCodesPage() {
   const [tournaments, setTournaments] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState('');
   const [existing, setExisting] = React.useState(null);

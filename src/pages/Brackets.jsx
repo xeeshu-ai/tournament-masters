@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 import { isPowerOfTwo } from '../constants';
 
-export default function BracketManagerPage() {
+export function BracketManagerPage() {
   const [tournaments, setTournaments] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState('');
   const [bracket, setBracket] = React.useState(null);
