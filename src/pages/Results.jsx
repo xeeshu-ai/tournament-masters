@@ -22,10 +22,14 @@ export function ResultsPage() {
   React.useEffect(() => {
     supabaseAdmin
       .from('tournaments')
-      .select('id,title,type,mode')
+      .select('id, title, type, mode')
       .eq('is_archived', false)
-      .order('match_start_time', { ascending: true })
-      .then(({ data }) => setTournaments(data || []));
+      .order('start_time', { ascending: true })
+      .then(({ data, error }) => {
+        // eslint-disable-next-line no-console
+        if (error) console.error(error);
+        setTournaments(data || []);
+      });
   }, []);
 
   const loadTeams = async (tid) => {
@@ -46,7 +50,6 @@ export function ResultsPage() {
     );
   };
 
-  // Fix: compare as strings — IDs are UUIDs, not numbers
   const handleSelectTournament = async (id) => {
     setSelected(tournaments.find((t) => String(t.id) === String(id)) || null);
     setPassword('');
@@ -85,11 +88,10 @@ export function ResultsPage() {
     });
   };
 
-  // Notify players via notifications table
   const notifyPlayers = async (playerIds, text) => {
     if (!playerIds?.length) return;
     const rows = playerIds.filter(Boolean).map((id) => ({
-      player_id: id,              // Fix: was 'playerid' — correct column is player_id
+      player_id: id,
       title: 'Tournament Result',
       body: text,
       type: 'tournament',
@@ -101,7 +103,6 @@ export function ResultsPage() {
     if (!selected) return;
     setStatus('saving');
 
-    // Step 1: Get or create the match row for this tournament
     const { data: matchData, error: matchErr } = await supabaseAdmin
       .from('long_br_matches')
       .upsert(
@@ -119,7 +120,6 @@ export function ResultsPage() {
       return;
     }
 
-    // Step 2: Upsert scores linked to that match
     const payload = brRows.map((r) => ({
       match_id: matchData.id,
       team_name: r.team_name,
@@ -140,14 +140,12 @@ export function ResultsPage() {
       return;
     }
 
-    // Step 3: Save winner announcement + notify players
     if (winnerText.trim()) {
       await supabaseAdmin
         .from('tournaments')
         .update({ winner_text: winnerText.trim() })
         .eq('id', selected.id);
 
-      // Fix: actually call notifyPlayers — was defined but never invoked before
       const playerIds = brRows.map((r) => r.host_player_id).filter(Boolean);
       await notifyPlayers(playerIds, `Results are out for your tournament! ${winnerText.trim()}`);
     }
