@@ -81,26 +81,28 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
     }
     setSaving(true);
     setError('');
+
+    // FIX: use correct form state keys (with underscores, matching emptyForm)
     const payload = {
-  title: form.title,
-  type: form.type,
-  mode: form.mode,
-  format_label: form.formatlabel,
-  map: form.mode === 'br' ? form.map : null,
-  skills_on: form.mode !== 'br' ? form.skillson : false,
-  limited_ammo: form.mode !== 'br' ? form.limitedammo : false,
-  lw_format: form.mode === 'lw' ? form.lwformat : null,
-  entry_fee: Number(form.entryfee) || 0,
-  max_slots: Number(form.maxslots) || 0,
-  prize_text: form.prizetext,
-  points_table: form.pointstable,
-  entry_closing_time: form.entryclosingtime || null,
-  start_time: form.matchstarttime || null,        // DB column is start_time
-  youtube_live_url: form.youtubeliveurl || null,
-  tournament_password: form.tournamentpassword || null,
-  registration_status: form.registrationstatus,
-  is_archived: false,
-}
+      title: form.title,
+      type: form.type,
+      mode: form.mode,
+      format_label: form.format_label,
+      map: form.mode === 'br' ? form.map : null,
+      skills_on: form.mode !== 'br' ? form.skills_on : false,
+      limited_ammo: form.mode !== 'br' ? form.limited_ammo : false,
+      lw_format: form.mode === 'lw' ? form.lw_format : null,
+      entry_fee: Number(form.entry_fee) || 0,
+      max_slots: Number(form.max_slots) || 0,
+      prize_text: form.prize_text,
+      points_table: form.points_table,
+      entry_closing_time: form.entry_closing_time || null,
+      start_time: form.match_start_time || null,
+      youtube_live_url: form.youtube_live_url || null,
+      tournament_password: form.tournament_password || null,
+      registration_status: form.registration_status,
+      is_archived: false,
+    };
 
     let result;
     if (form.id) {
@@ -431,10 +433,11 @@ export function TournamentsPage() {
 
   const load = async () => {
     setLoading(true);
+    // FIX: DB column is start_time, not match_start_time
     const { data, error } = await supabaseAdmin
       .from('tournaments')
       .select('*')
-      .order('match_start_time', { ascending: true });
+      .order('start_time', { ascending: true });
     if (error) {
       // eslint-disable-next-line no-console
       console.error(error);
@@ -538,8 +541,8 @@ export function TournamentsPage() {
                       </span>
                     </td>
                     <td>
-                      {t.match_start_time
-                        ? new Date(t.match_start_time).toLocaleString()
+                      {t.start_time
+                        ? new Date(t.start_time).toLocaleString()
                         : '—'}
                     </td>
                     <td className="space-x-2 text-right">
@@ -596,8 +599,8 @@ export function TournamentsPage() {
                       <td>{t.mode}</td>
                       <td>{t.format_label}</td>
                       <td>
-                        {t.match_start_time
-                          ? new Date(t.match_start_time).toLocaleString()
+                        {t.start_time
+                          ? new Date(t.start_time).toLocaleString()
                           : '—'}
                       </td>
                     </tr>
