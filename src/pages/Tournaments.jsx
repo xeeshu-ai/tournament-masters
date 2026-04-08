@@ -4,6 +4,25 @@ import { BR_SLOT_OPTIONS, FFMAPS, FFMODES, TOURNAMENT_TYPES } from '../constants
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Toast } from '../components/Toast';
 
+const BR_TEAM_SIZES = [
+  { value: 1, label: 'Solo (1 player)' },
+  { value: 2, label: 'Duo (2 players)' },
+  { value: 4, label: 'Squad (4 players)' },
+];
+
+const BR_PLAYERS_PER_MATCH = [20, 32, 48];
+
+const CS_ROUNDS = [5, 7, 11, 13];
+const LW_ROUNDS = [9, 11, 13];
+
+// Auto-calculate max slots from players_per_match ÷ team_size
+function calcMaxSlots(playersPerMatch, teamSize) {
+  const p = Number(playersPerMatch);
+  const t = Number(teamSize);
+  if (!p || !t) return '';
+  return Math.floor(p / t);
+}
+
 const emptyForm = {
   id: null,
   title: '',
@@ -23,6 +42,9 @@ const emptyForm = {
   youtube_live_url: '',
   tournament_password: '',
   registration_status: 'open',
+  team_size: 1,
+  players_per_match: '',
+  total_rounds: '',
 };
 
 function TournamentForm({ open, onClose, initial, onSaved }) {
@@ -37,7 +59,46 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+    setForm((f) => {
+      const updated = { ...f, [name]: type === 'checkbox' ? checked : value };
+
+      // Auto-calculate max_slots for BR when team_size or players_per_match changes
+      if (updated.mode === 'br' && (name === 'team_size' || name === 'players_per_match')) {
+        updated.max_slots = calcMaxSlots(
+          name === 'players_per_match' ? value : f.players_per_match,
+          name === 'team_size' ? value : f.team_size
+        );
+      }
+
+      // Auto-set format_label for BR based on team_size
+      if (updated.mode === 'br' && name === 'team_size') {
+        const size = Number(value);
+        updated.format_label = size === 1 ? 'Solo' : size === 2 ? 'Duo' : 'Squad';
+      }
+
+      // Auto-set format_label for CS/LW
+      if (name === 'mode') {
+        if (value === 'cs') {
+          updated.format_label = '4v4';
+          updated.max_slots = 2;
+          updated.team_size = 4;
+        } else if (value === 'lw') {
+          updated.max_slots = 2;
+        } else if (value === 'br') {
+          updated.max_slots = calcMaxSlots(updated.players_per_match, updated.team_size);
+        }
+      }
+
+      // Auto-set max_slots and format_label for LW based on team_size
+      if (updated.mode === 'lw' && name === 'team_size') {
+        const size = Number(value);
+        updated.format_label = size === 1 ? '1v1' : '2v2';
+        updated.lw_format = size === 1 ? '1v1' : '2v2';
+        updated.max_slots = 2;
+      }
+
+      return updated;
+    });
   };
 
   const validate = () => {
@@ -52,21 +113,13 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
     if (closing >= start) {
       return 'Entry closing time must be before match start time.';
     }
-    const maxSlots = Number(form.max_slots || 0);
     if (form.mode === 'br') {
-      const format = (form.format_label || '').toLowerCase();
-      if (format.includes('solo') && !BR_SLOT_OPTIONS.solo.includes(maxSlots)) {
-        return 'BR Solo max slots must be 20, 32, or 48.';
-      }
-      if (format.includes('duo') && !BR_SLOT_OPTIONS.duo.includes(maxSlots)) {
-        return 'BR Duo max slots must be 10, 16, or 24.';
-      }
-      if (format.includes('squad') && !BR_SLOT_OPTIONS.squad.includes(maxSlots)) {
-        return 'BR Squad max slots must be 5, 8, or 12.';
-      }
-    } else {
-      if (!maxSlots || maxSlots < 4 || maxSlots % 2 !== 0) {
-        return 'CS and LW max slots must be an even number ≥ 4.';
+      if (!form.players_per_match) return 'Select players per match for BR.';
+      if (!form.team_size) return 'Select team size for BR.';
+      const maxSlots = Number(form.max_slots || 0);
+      const teamKey = Number(form.team_size) === 1 ? 'solo' : Number(form.team_size) === 2 ? 'duo' : 'squad';
+      if (!BR_SLOT_OPTIONS[teamKey].includes(maxSlots)) {
+        return `BR ${teamKey} max slots must be ${BR_SLOT_OPTIONS[teamKey].join(', ')}.`;
       }
     }
     return '';
@@ -75,23 +128,23 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const v = validate();
-    if (v) {
-      setError(v);
-      return;
-    }
+    if (v) { setError(v); return; }
     setSaving(true);
     setError('');
 
-    // FIX: use correct form state keys (with underscores, matching emptyForm)
+    const isBR = form.mode === 'br';
+    const isCS = form.mode === 'cs';
+    const isLW = form.mode === 'lw';
+
     const payload = {
       title: form.title,
       type: form.type,
       mode: form.mode,
       format_label: form.format_label,
-      map: form.mode === 'br' ? form.map : null,
-      skills_on: form.mode !== 'br' ? form.skills_on : false,
-      limited_ammo: form.mode !== 'br' ? form.limited_ammo : false,
-      lw_format: form.mode === 'lw' ? form.lw_format : null,
+      map: isBR ? form.map : null,
+      skills_on: !isBR ? form.skills_on : false,
+      limited_ammo: !isBR ? form.limited_ammo : false,
+      lw_format: isLW ? form.lw_format : null,
       entry_fee: Number(form.entry_fee) || 0,
       max_slots: Number(form.max_slots) || 0,
       prize_text: form.prize_text,
@@ -102,23 +155,20 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
       tournament_password: form.tournament_password || null,
       registration_status: form.registration_status,
       is_archived: false,
+      team_size: Number(form.team_size) || 1,
+      players_per_match: isBR ? (Number(form.players_per_match) || null) : null,
+      total_rounds: (isCS || isLW) ? (Number(form.total_rounds) || null) : null,
     };
 
     let result;
     if (form.id) {
-      result = await supabaseAdmin
-        .from('tournaments')
-        .update(payload)
-        .eq('id', form.id)
-        .select()
-        .single();
+      result = await supabaseAdmin.from('tournaments').update(payload).eq('id', form.id).select().single();
     } else {
       result = await supabaseAdmin.from('tournaments').insert(payload).select().single();
     }
 
     const { error: err } = result;
     if (err) {
-      // eslint-disable-next-line no-console
       console.error(err);
       setError('Failed to save tournament.');
       setSaving(false);
@@ -147,155 +197,147 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
               Configure mode, slots, timings, and security password.
             </p>
           </div>
-          <button type="button" className="btn-secondary" onClick={onClose}>
-            Close
-          </button>
+          <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
         </div>
+
         <form onSubmit={handleSubmit} className="grid gap-3 md:grid-cols-2">
+          {/* Title */}
           <div className="md:col-span-2">
-            <label className="label" htmlFor="title">
-              Title
-            </label>
-            <input
-              id="title"
-              name="title"
-              className="input"
-              value={form.title}
-              onChange={handleChange}
-              required
-            />
+            <label className="label" htmlFor="title">Title</label>
+            <input id="title" name="title" className="input" value={form.title} onChange={handleChange} required />
           </div>
+
+          {/* Type */}
           <div>
-            <label className="label" htmlFor="type">
-              Type
-            </label>
-            <select
-              id="type"
-              name="type"
-              className="input"
-              value={form.type}
-              onChange={handleChange}
-            >
-              {TOURNAMENT_TYPES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
+            <label className="label" htmlFor="type">Type</label>
+            <select id="type" name="type" className="input" value={form.type} onChange={handleChange}>
+              {TOURNAMENT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
             </select>
           </div>
+
+          {/* Mode */}
           <div>
-            <label className="label" htmlFor="mode">
-              Mode
-            </label>
-            <select
-              id="mode"
-              name="mode"
-              className="input"
-              value={form.mode}
-              onChange={handleChange}
-            >
-              {FFMODES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
+            <label className="label" htmlFor="mode">Mode</label>
+            <select id="mode" name="mode" className="input" value={form.mode} onChange={handleChange}>
+              {FFMODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </div>
+
+          {/* BR: Team size + Players per match */}
+          {isBR && (
+            <>
+              <div>
+                <label className="label" htmlFor="team_size">Team size</label>
+                <select id="team_size" name="team_size" className="input" value={form.team_size} onChange={handleChange}>
+                  {BR_TEAM_SIZES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="players_per_match">Players per match</label>
+                <select id="players_per_match" name="players_per_match" className="input" value={form.players_per_match} onChange={handleChange}>
+                  <option value="">Select</option>
+                  {BR_PLAYERS_PER_MATCH.map((n) => (
+                    <option key={n} value={n}>{n} players</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* CS: Team size is fixed 4, show rounds */}
+          {isCS && (
+            <div>
+              <label className="label" htmlFor="total_rounds">Total rounds</label>
+              <select id="total_rounds" name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
+                <option value="">Select</option>
+                {CS_ROUNDS.map((r) => <option key={r} value={r}>{r} rounds</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* LW: Team size + rounds */}
+          {isLW && (
+            <>
+              <div>
+                <label className="label" htmlFor="team_size">Team size</label>
+                <select id="team_size" name="team_size" className="input" value={form.team_size} onChange={handleChange}>
+                  <option value={1}>Solo (1v1)</option>
+                  <option value={2}>Duo (2v2)</option>
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="total_rounds">Total rounds</label>
+                <select id="total_rounds" name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
+                  <option value="">Select</option>
+                  {LW_ROUNDS.map((r) => <option key={r} value={r}>{r} rounds</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Format label — auto-filled but editable */}
           <div>
-            <label className="label" htmlFor="format_label">
-              Format label
-            </label>
+            <label className="label" htmlFor="format_label">Format label</label>
             <input
               id="format_label"
               name="format_label"
               className="input"
-              placeholder={isBR ? 'Solo / Duo / Squad' : isCS ? '4v4' : '1v1 / 2v2'}
+              placeholder={isBR ? 'Auto-filled from team size' : isCS ? '4v4' : '1v1 / 2v2'}
               value={form.format_label}
               onChange={handleChange}
               required
             />
           </div>
+
+          {/* BR: Map */}
           {isBR && (
             <div>
-              <label className="label" htmlFor="map">
-                Map (BR only)
-              </label>
-              <select
-                id="map"
-                name="map"
-                className="input"
-                value={form.map}
-                onChange={handleChange}
-              >
+              <label className="label" htmlFor="map">Map</label>
+              <select id="map" name="map" className="input" value={form.map} onChange={handleChange}>
                 <option value="">Select map</option>
-                {FFMAPS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
+                {FFMAPS.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
           )}
+
+          {/* CS/LW: Skills + Ammo */}
           {!isBR && (
-            <>
-              <div className="flex items-center gap-2 pt-5">
-                <label className="inline-flex items-center gap-2 text-11px text-slate-200">
-                  <input
-                    type="checkbox"
-                    name="skills_on"
-                    checked={form.skills_on}
-                    onChange={handleChange}
-                    className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500"
-                  />
-                  Skills on
-                </label>
-                <label className="inline-flex items-center gap-2 text-11px text-slate-200">
-                  <input
-                    type="checkbox"
-                    name="limited_ammo"
-                    checked={form.limited_ammo}
-                    onChange={handleChange}
-                    className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500"
-                  />
-                  Limited ammo
-                </label>
-              </div>
-              {isLW && (
-                <div>
-                  <label className="label" htmlFor="lw_format">
-                    LW format
-                  </label>
-                  <select
-                    id="lw_format"
-                    name="lw_format"
-                    className="input"
-                    value={form.lw_format}
-                    onChange={handleChange}
-                  >
-                    <option value="">Select</option>
-                    <option value="1v1">1v1</option>
-                    <option value="2v2">2v2</option>
-                  </select>
-                </div>
-              )}
-            </>
+            <div className="flex items-center gap-4 pt-5">
+              <label className="inline-flex items-center gap-2 text-11px text-slate-200">
+                <input
+                  type="checkbox"
+                  name="skills_on"
+                  checked={form.skills_on}
+                  onChange={handleChange}
+                  className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500"
+                />
+                Skills on
+              </label>
+              <label className="inline-flex items-center gap-2 text-11px text-slate-200">
+                <input
+                  type="checkbox"
+                  name="limited_ammo"
+                  checked={form.limited_ammo}
+                  onChange={handleChange}
+                  className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500"
+                />
+                Limited ammo
+              </label>
+            </div>
           )}
+
+          {/* Entry fee */}
           <div>
-            <label className="label" htmlFor="entry_fee">
-              Entry fee
-            </label>
-            <input
-              id="entry_fee"
-              name="entry_fee"
-              type="number"
-              className="input"
-              value={form.entry_fee}
-              onChange={handleChange}
-            />
+            <label className="label" htmlFor="entry_fee">Entry fee</label>
+            <input id="entry_fee" name="entry_fee" type="number" className="input" value={form.entry_fee} onChange={handleChange} />
           </div>
+
+          {/* Max slots — auto for BR, locked for CS/LW */}
           <div>
             <label className="label" htmlFor="max_slots">
-              Max slots
+              Max slots{isBR ? ' (auto-calculated)' : ' (locked to 2)'}
             </label>
             <input
               id="max_slots"
@@ -304,109 +346,55 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
               className="input"
               value={form.max_slots}
               onChange={handleChange}
+              readOnly={isCS || isLW}
             />
           </div>
+
+          {/* Prize */}
           <div className="md:col-span-2">
-            <label className="label" htmlFor="prize_text">
-              Prize distribution (free text)
-            </label>
-            <textarea
-              id="prize_text"
-              name="prize_text"
-              rows={3}
-              className="input resize-none"
-              value={form.prize_text}
-              onChange={handleChange}
-            />
+            <label className="label" htmlFor="prize_text">Prize distribution (free text)</label>
+            <textarea id="prize_text" name="prize_text" rows={3} className="input resize-none" value={form.prize_text} onChange={handleChange} />
           </div>
+
+          {/* Points table */}
           <div className="md:col-span-2">
-            <label className="label" htmlFor="points_table">
-              Points table (free text)
-            </label>
-            <textarea
-              id="points_table"
-              name="points_table"
-              rows={3}
-              className="input resize-none"
-              value={form.points_table}
-              onChange={handleChange}
-            />
+            <label className="label" htmlFor="points_table">Points table (free text)</label>
+            <textarea id="points_table" name="points_table" rows={3} className="input resize-none" value={form.points_table} onChange={handleChange} />
+          </div>
+
+          {/* Times */}
+          <div>
+            <label className="label" htmlFor="entry_closing_time">Entry closing time</label>
+            <input id="entry_closing_time" name="entry_closing_time" type="datetime-local" className="input" value={form.entry_closing_time} onChange={handleChange} required />
           </div>
           <div>
-            <label className="label" htmlFor="entry_closing_time">
-              Entry closing time
-            </label>
-            <input
-              id="entry_closing_time"
-              name="entry_closing_time"
-              type="datetime-local"
-              className="input"
-              value={form.entry_closing_time}
-              onChange={handleChange}
-              required
-            />
+            <label className="label" htmlFor="match_start_time">Match start time</label>
+            <input id="match_start_time" name="match_start_time" type="datetime-local" className="input" value={form.match_start_time} onChange={handleChange} required />
+          </div>
+
+          {/* YouTube + Password */}
+          <div>
+            <label className="label" htmlFor="youtube_live_url">YouTube live URL</label>
+            <input id="youtube_live_url" name="youtube_live_url" className="input" value={form.youtube_live_url} onChange={handleChange} />
           </div>
           <div>
-            <label className="label" htmlFor="match_start_time">
-              Match start time
-            </label>
-            <input
-              id="match_start_time"
-              name="match_start_time"
-              type="datetime-local"
-              className="input"
-              value={form.match_start_time}
-              onChange={handleChange}
-              required
-            />
+            <label className="label" htmlFor="tournament_password">Tournament password (4 digits)</label>
+            <input id="tournament_password" name="tournament_password" className="input" value={form.tournament_password} onChange={handleChange} />
           </div>
+
+          {/* Registration status */}
           <div>
-            <label className="label" htmlFor="youtube_live_url">
-              YouTube live URL
-            </label>
-            <input
-              id="youtube_live_url"
-              name="youtube_live_url"
-              className="input"
-              value={form.youtube_live_url}
-              onChange={handleChange}
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="tournament_password">
-              Tournament password (4 digits)
-            </label>
-            <input
-              id="tournament_password"
-              name="tournament_password"
-              className="input"
-              value={form.tournament_password}
-              onChange={handleChange}
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="registration_status">
-              Registration status
-            </label>
-            <select
-              id="registration_status"
-              name="registration_status"
-              className="input"
-              value={form.registration_status}
-              onChange={handleChange}
-            >
+            <label className="label" htmlFor="registration_status">Registration status</label>
+            <select id="registration_status" name="registration_status" className="input" value={form.registration_status} onChange={handleChange}>
               <option value="open">Open</option>
               <option value="closed">Closed</option>
             </select>
           </div>
 
-          {error && (
-            <div className="md:col-span-2 text-11px text-red-400">{error}</div>
-          )}
+          {error && <div className="md:col-span-2 text-11px text-red-400">{error}</div>}
+
           <div className="md:col-span-2 flex justify-end gap-2 pt-1">
-            <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
+            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn-primary" disabled={saving}>
               {saving ? 'Saving…' : 'Save tournament'}
             </button>
@@ -433,13 +421,11 @@ export function TournamentsPage() {
 
   const load = async () => {
     setLoading(true);
-    // FIX: DB column is start_time, not match_start_time
     const { data, error } = await supabaseAdmin
       .from('tournaments')
       .select('*')
       .order('start_time', { ascending: true });
     if (error) {
-      // eslint-disable-next-line no-console
       console.error(error);
       setLoading(false);
       return;
@@ -449,20 +435,30 @@ export function TournamentsPage() {
     setLoading(false);
   };
 
-  React.useEffect(() => {
-    load();
-  }, []);
+  React.useEffect(() => { load(); }, []);
 
   const labelForType = (id) => TOURNAMENT_TYPES.find((x) => x.id === id)?.label || id;
 
+  // Build a readable format badge: "Squad · 48p", "CS · 7 rounds", "LW Duo · 11 rounds"
+  const formatBadge = (t) => {
+    if (t.mode === 'br') {
+      const size = Number(t.team_size) === 1 ? 'Solo' : Number(t.team_size) === 2 ? 'Duo' : 'Squad';
+      return t.players_per_match ? `${size} · ${t.players_per_match}p` : size;
+    }
+    if (t.mode === 'cs') {
+      return t.total_rounds ? `CS · ${t.total_rounds}R` : 'CS';
+    }
+    if (t.mode === 'lw') {
+      const size = Number(t.team_size) === 1 ? '1v1' : '2v2';
+      return t.total_rounds ? `LW ${size} · ${t.total_rounds}R` : `LW ${size}`;
+    }
+    return t.format_label || t.mode;
+  };
+
   const handleArchiveConfirmed = async () => {
     const { id } = confirmArchive;
-    const { error } = await supabaseAdmin
-      .from('tournaments')
-      .update({ is_archived: true })
-      .eq('id', id);
+    const { error } = await supabaseAdmin.from('tournaments').update({ is_archived: true }).eq('id', id);
     if (error) {
-      // eslint-disable-next-line no-console
       console.error(error);
       notify('Failed to archive tournament.', 'error');
       return;
@@ -484,10 +480,7 @@ export function TournamentsPage() {
         <button
           type="button"
           className="btn-primary text-xs"
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
+          onClick={() => { setEditing(null); setFormOpen(true); }}
         >
           New tournament
         </button>
@@ -519,40 +512,24 @@ export function TournamentsPage() {
                 {tournaments.map((t) => (
                   <tr key={t.id}>
                     <td>{t.title}</td>
+                    <td><span className="badge">{labelForType(t.type)}</span></td>
+                    <td>{t.mode?.toUpperCase()}</td>
                     <td>
-                      <span className="badge">{labelForType(t.type)}</span>
+                      <span className="badge">{formatBadge(t)}</span>
                     </td>
-                    <td>{t.mode}</td>
-                    <td>{t.format_label}</td>
                     <td>{t.entry_fee}</td>
+                    <td>{t.filled_slots || 0}/{t.max_slots}</td>
                     <td>
-                      {t.filled_slots || 0}/{t.max_slots}
-                    </td>
-                    <td>
-                      <span
-                        className={
-                          'status-pill ' +
-                          (t.registration_status === 'open'
-                            ? 'pending'
-                            : 'approved')
-                        }
-                      >
+                      <span className={'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')}>
                         {t.registration_status}
                       </span>
                     </td>
-                    <td>
-                      {t.start_time
-                        ? new Date(t.start_time).toLocaleString()
-                        : '—'}
-                    </td>
+                    <td>{t.start_time ? new Date(t.start_time).toLocaleString() : '—'}</td>
                     <td className="space-x-2 text-right">
                       <button
                         type="button"
                         className="btn-secondary text-[11px]"
-                        onClick={() => {
-                          setEditing(t);
-                          setFormOpen(true);
-                        }}
+                        onClick={() => { setEditing(t); setFormOpen(true); }}
                       >
                         Edit
                       </button>
@@ -596,13 +573,9 @@ export function TournamentsPage() {
                     <tr key={t.id}>
                       <td>{t.title}</td>
                       <td>{labelForType(t.type)}</td>
-                      <td>{t.mode}</td>
-                      <td>{t.format_label}</td>
-                      <td>
-                        {t.start_time
-                          ? new Date(t.start_time).toLocaleString()
-                          : '—'}
-                      </td>
+                      <td>{t.mode?.toUpperCase()}</td>
+                      <td>{formatBadge(t)}</td>
+                      <td>{t.start_time ? new Date(t.start_time).toLocaleString() : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -612,18 +585,8 @@ export function TournamentsPage() {
         </details>
       </section>
 
-      <TournamentForm
-        open={formOpen}
-        initial={editing}
-        onClose={() => setFormOpen(false)}
-        onSaved={load}
-      />
-
-      <Toast
-        message={toast?.message}
-        type={toast?.type}
-        onClose={() => setToast(null)}
-      />
+      <TournamentForm open={formOpen} initial={editing} onClose={() => setFormOpen(false)} onSaved={load} />
+      <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
       <ConfirmDialog
         open={confirmArchive.open}
         title="Archive tournament?"
