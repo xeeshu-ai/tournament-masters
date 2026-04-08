@@ -40,7 +40,6 @@ const emptyForm = {
   entry_closing_time: '',
   match_start_time: '',
   youtube_live_url: '',
-  tournament_password: '',
   registration_status: 'open',
   team_size: 1,
   players_per_match: '',
@@ -102,9 +101,6 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
   };
 
   const validate = () => {
-    if (!/^\d{4}$/.test(form.tournament_password || '')) {
-      return 'Tournament password must be exactly 4 digits.';
-    }
     if (!form.entry_closing_time || !form.match_start_time) {
       return 'Both entry closing time and match start time are required.';
     }
@@ -152,7 +148,6 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
       entry_closing_time: form.entry_closing_time || null,
       start_time: form.match_start_time || null,
       youtube_live_url: form.youtube_live_url || null,
-      tournament_password: form.tournament_password || null,
       registration_status: form.registration_status,
       is_archived: false,
       team_size: Number(form.team_size) || 1,
@@ -194,7 +189,7 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
               {form.id ? 'Edit tournament' : 'Create tournament'}
             </h2>
             <p className="text-11px text-slate-500">
-              Configure mode, slots, timings, and security password.
+              Configure mode, slots, and timings.
             </p>
           </div>
           <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
@@ -372,14 +367,10 @@ function TournamentForm({ open, onClose, initial, onSaved }) {
             <input id="match_start_time" name="match_start_time" type="datetime-local" className="input" value={form.match_start_time} onChange={handleChange} required />
           </div>
 
-          {/* YouTube + Password */}
-          <div>
+          {/* YouTube */}
+          <div className="md:col-span-2">
             <label className="label" htmlFor="youtube_live_url">YouTube live URL</label>
             <input id="youtube_live_url" name="youtube_live_url" className="input" value={form.youtube_live_url} onChange={handleChange} />
-          </div>
-          <div>
-            <label className="label" htmlFor="tournament_password">Tournament password (4 digits)</label>
-            <input id="tournament_password" name="tournament_password" className="input" value={form.tournament_password} onChange={handleChange} />
           </div>
 
           {/* Registration status */}
@@ -412,6 +403,7 @@ export function TournamentsPage() {
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
   const [confirmArchive, setConfirmArchive] = React.useState({ open: false });
+  const [confirmDelete, setConfirmDelete] = React.useState({ open: false });
   const [toast, setToast] = React.useState(null);
 
   const notify = (message, type = 'success') => {
@@ -465,6 +457,19 @@ export function TournamentsPage() {
     }
     notify('Tournament archived.');
     setConfirmArchive({ open: false });
+    load();
+  };
+
+  const handleDeleteConfirmed = async () => {
+    const { id } = confirmDelete;
+    const { error } = await supabaseAdmin.from('tournaments').delete().eq('id', id);
+    if (error) {
+      console.error(error);
+      notify('Failed to delete tournament.', 'error');
+      return;
+    }
+    notify('Tournament deleted permanently.');
+    setConfirmDelete({ open: false });
     load();
   };
 
@@ -540,6 +545,13 @@ export function TournamentsPage() {
                       >
                         Archive
                       </button>
+                      <button
+                        type="button"
+                        className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
+                        onClick={() => setConfirmDelete({ open: true, id: t.id, title: t.title })}
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -566,6 +578,7 @@ export function TournamentsPage() {
                     <th>Mode</th>
                     <th>Format</th>
                     <th>Start</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -576,6 +589,15 @@ export function TournamentsPage() {
                       <td>{t.mode?.toUpperCase()}</td>
                       <td>{formatBadge(t)}</td>
                       <td>{t.start_time ? new Date(t.start_time).toLocaleString() : '—'}</td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
+                          onClick={() => setConfirmDelete({ open: true, id: t.id, title: t.title })}
+                        >
+                          Delete
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -594,6 +616,14 @@ export function TournamentsPage() {
         confirmLabel="Archive"
         onCancel={() => setConfirmArchive({ open: false })}
         onConfirm={handleArchiveConfirmed}
+      />
+      <ConfirmDialog
+        open={confirmDelete.open}
+        title={`Delete "${confirmDelete.title}"?`}
+        description="This will permanently delete the tournament and all its registrations. This action cannot be undone."
+        confirmLabel="Delete permanently"
+        onCancel={() => setConfirmDelete({ open: false })}
+        onConfirm={handleDeleteConfirmed}
       />
     </div>
   );
