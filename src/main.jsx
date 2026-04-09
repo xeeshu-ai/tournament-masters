@@ -8,6 +8,7 @@ import { Login } from './pages/Login';
 import { DashboardPage } from './pages/Dashboard';
 import { PlayersPage } from './pages/Players';
 import { TournamentsPage } from './pages/Tournaments';
+import { RegistrationsPage } from './pages/Registrations';
 import { PaymentsPage } from './pages/Payments';
 import { ComplaintsPage } from './pages/Complaints';
 import { BracketManagerPage } from './pages/Brackets';
@@ -64,6 +65,7 @@ function AdminShell() {
         <Route index element={<DashboardPage navigate={navigate} />} />
         <Route path="players" element={<PlayersPage />} />
         <Route path="tournaments" element={<TournamentsPage />} />
+        <Route path="registrations" element={<RegistrationsPage />} />
         <Route path="brackets" element={<BracketManagerPage />} />
         <Route path="results" element={<ResultsPage />} />
         <Route path="payments" element={<PaymentsPage />} />

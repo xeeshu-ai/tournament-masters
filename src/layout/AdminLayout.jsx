@@ -6,6 +6,7 @@ const navItems = [
   { to: '', label: 'Overview' },
   { to: 'players', label: 'Players' },
   { to: 'tournaments', label: 'Tournaments' },
+  { to: 'registrations', label: 'Registrations' },
   { to: 'brackets', label: 'Bracket Manager' },
   { to: 'results', label: 'Results Entry' },
   { to: 'payments', label: 'Payments' },
@@ -80,7 +81,6 @@ export function AdminLayout({ user, children }) {
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
             aria-label="Close menu"
           >
-            {/* X icon */}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -114,7 +114,6 @@ export function AdminLayout({ user, children }) {
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                 aria-label="Open menu"
               >
-                {/* Hamburger icon */}
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M3 12h18M3 6h18M3 18h18"/>
                 </svg>
