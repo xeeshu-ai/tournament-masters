@@ -26,44 +26,18 @@ function StatusPill({ status }) {
   );
 }
 
-// Parse team_members_summary into an array of { name, uid } objects.
-// Supports common formats:
-//   "Name - UID\nName - UID"
-//   "Name: UID\nName: UID"
-//   plain UIDs one per line
-function parseSummary(summary) {
-  if (!summary) return [];
-  return summary
-    .split(/\n|,/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const sep = line.includes(' - ') ? ' - ' : line.includes(': ') ? ': ' : null;
-      if (sep) {
-        const [name, uid] = line.split(sep);
-        return { name: name?.trim() || null, uid: uid?.trim() || line };
-      }
-      return { name: null, uid: line };
-    });
-}
-
-// ─── Team Card (collapsible) ──────────────────────────────────────────────────────
+// ─── Team Card (collapsible) ──────────────────────────────────────────────────
 function TeamCard({ reg, idx, onRemove }) {
   const [open, setOpen] = React.useState(false);
 
-  // Individual UID columns first, fall back to parsed summary
-  const membersFromCols = [
-    reg.member_2_uid ? { name: null, uid: reg.member_2_uid } : null,
-    reg.member_3_uid ? { name: null, uid: reg.member_3_uid } : null,
-    reg.member_4_uid ? { name: null, uid: reg.member_4_uid } : null,
+  // Use the correct column names: teammate_uid_1, teammate_uid_2, teammate_uid_3
+  const teammates = [
+    reg.teammate_uid_1 ? { uid: reg.teammate_uid_1 } : null,
+    reg.teammate_uid_2 ? { uid: reg.teammate_uid_2 } : null,
+    reg.teammate_uid_3 ? { uid: reg.teammate_uid_3 } : null,
   ].filter(Boolean);
 
-  const membersFromSummary = parseSummary(reg.team_members_summary);
-
-  // Use individual columns if any are filled, else fall back to summary
-  const teammates = membersFromCols.length > 0 ? membersFromCols : membersFromSummary;
-
-  const totalMembers = 1 + teammates.length; // host + rest
+  const totalMembers = 1 + teammates.length;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/60 text-xs overflow-hidden">
@@ -124,13 +98,12 @@ function TeamCard({ reg, idx, onRemove }) {
               {teammates.map((m, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                   <span className="text-slate-500 w-16 flex-shrink-0">Member {i + 2}:</span>
-                  {m.name && <span className="text-slate-200">{m.name}</span>}
                   <span className="font-mono text-slate-300 select-all">{m.uid}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-[11px] text-slate-600 italic">No teammate UIDs recorded.</p>
+            <p className="text-[11px] text-slate-600 italic">Solo registration — no teammates.</p>
           )}
 
           {/* Payment */}
@@ -138,7 +111,7 @@ function TeamCard({ reg, idx, onRemove }) {
             <div className="rounded-lg bg-slate-950/70 px-3 py-2 space-y-0.5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-1">Payment</p>
               {reg.razorpay_order_id && <p className="font-mono text-[11px] text-slate-400">Order: {reg.razorpay_order_id}</p>}
-              {reg.payment_id     && <p className="font-mono text-[11px] text-slate-400">Payment ID: {reg.payment_id}</p>}
+              {reg.payment_id        && <p className="font-mono text-[11px] text-slate-400">Payment ID: {reg.payment_id}</p>}
             </div>
           )}
 
@@ -149,7 +122,7 @@ function TeamCard({ reg, idx, onRemove }) {
   );
 }
 
-// ─── Tournament Section (collapsible) ───────────────────────────────────────────────
+// ─── Tournament Section (collapsible) ────────────────────────────────────────
 function TournamentSection({ tournament, registrations, onRemove }) {
   const [open, setOpen] = React.useState(true);
   const total     = registrations.length;
@@ -199,7 +172,7 @@ function TournamentSection({ tournament, registrations, onRemove }) {
   );
 }
 
-// ─── Remove dialog ───────────────────────────────────────────────────────────────
+// ─── Remove dialog ────────────────────────────────────────────────────────────
 function RemoveDialog({ reg, onCancel, onConfirm }) {
   if (!reg) return null;
   return (
@@ -209,7 +182,7 @@ function RemoveDialog({ reg, onCancel, onConfirm }) {
         <p className="text-xs text-slate-300">
           Remove <span className="font-semibold text-slate-50">{reg.team_name || 'this team'}</span>{' '}
           (host UID: <span className="font-mono text-sky-300">{reg.host_uid}</span>) from the tournament?
-          This will also decrement the filled slots counter.
+          The filled slots counter will update automatically.
         </p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary text-xs" onClick={onCancel}>Cancel</button>
@@ -257,11 +230,11 @@ export function RegistrationsPage() {
       return;
     }
 
-    // 2. Registrations (no join)
+    // 2. Registrations — correct column names: teammate_uid_1/2/3
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
       .select(
-        'id, tournament_id, host_uid, host_player_id, team_name, team_members_summary, status, created_at, member_2_uid, member_3_uid, member_4_uid, razorpay_order_id, payment_id'
+        'id, tournament_id, host_uid, team_name, status, created_at, teammate_uid_1, teammate_uid_2, teammate_uid_3, razorpay_order_id, payment_id'
       )
       .order('created_at', { ascending: true });
 
@@ -274,7 +247,7 @@ export function RegistrationsPage() {
       return;
     }
 
-    // 3. Fetch player names from players table by ff_uid (correct column)
+    // 3. Resolve host names via ff_uid → full_name
     const hostUids = [...new Set((rData || []).map((r) => r.host_uid).filter(Boolean))];
     let nameMap = {};
 
@@ -291,7 +264,7 @@ export function RegistrationsPage() {
       }
     }
 
-    // 4. Group registrations by tournament, attach resolved host_name
+    // 4. Group by tournament, attach host_name
     const grouped = {};
     for (const reg of rData || []) {
       const row = { ...reg, host_name: nameMap[reg.host_uid] || null };
@@ -306,7 +279,7 @@ export function RegistrationsPage() {
 
   React.useEffect(() => { load(); }, []);
 
-  // Remove registration
+  // Remove registration — trigger handles filled_slots decrement automatically
   const handleRemoveConfirmed = async () => {
     const reg = removeTarget;
     if (!reg) return;
@@ -322,17 +295,6 @@ export function RegistrationsPage() {
       setRemoveTarget(null);
       return;
     }
-
-    const { data: fresh } = await supabaseAdmin
-      .from('tournaments')
-      .select('filled_slots')
-      .eq('id', reg.tournament_id)
-      .maybeSingle();
-
-    await supabaseAdmin
-      .from('tournaments')
-      .update({ filled_slots: Math.max(0, (fresh?.filled_slots || 1) - 1) })
-      .eq('id', reg.tournament_id);
 
     notify('Registration removed.');
     setRemoveTarget(null);
@@ -352,10 +314,9 @@ export function RegistrationsPage() {
           r.host_uid?.toLowerCase().includes(q) ||
           r.team_name?.toLowerCase().includes(q) ||
           r.host_name?.toLowerCase().includes(q) ||
-          r.team_members_summary?.toLowerCase().includes(q) ||
-          r.member_2_uid?.toLowerCase().includes(q) ||
-          r.member_3_uid?.toLowerCase().includes(q) ||
-          r.member_4_uid?.toLowerCase().includes(q)
+          r.teammate_uid_1?.toLowerCase().includes(q) ||
+          r.teammate_uid_2?.toLowerCase().includes(q) ||
+          r.teammate_uid_3?.toLowerCase().includes(q)
       );
     });
 
