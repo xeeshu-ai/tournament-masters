@@ -6,8 +6,6 @@ import { Toast } from '../components/Toast';
 export function ResultsPage() {
   const [tournaments, setTournaments] = React.useState([]);
   const [selected, setSelected] = React.useState(null);
-  const [password, setPassword] = React.useState('');
-  const [unlockedIds, setUnlockedIds] = React.useState([]);
   const [teams, setTeams] = React.useState([]);
   const [brRows, setBrRows] = React.useState([]);
   const [winnerText, setWinnerText] = React.useState('');
@@ -26,7 +24,6 @@ export function ResultsPage() {
       .eq('is_archived', false)
       .order('start_time', { ascending: true })
       .then(({ data, error }) => {
-        // eslint-disable-next-line no-console
         if (error) console.error(error);
         setTournaments(data || []);
       });
@@ -51,31 +48,12 @@ export function ResultsPage() {
   };
 
   const handleSelectTournament = async (id) => {
-    setSelected(tournaments.find((t) => String(t.id) === String(id)) || null);
-    setPassword('');
+    const t = tournaments.find((t) => String(t.id) === String(id)) || null;
+    setSelected(t);
     setWinnerText('');
-    if (!unlockedIds.includes(id)) {
-      setTeams([]);
-      setBrRows([]);
-    } else {
-      await loadTeams(id);
-    }
-  };
-
-  const handleUnlock = async () => {
-    if (!selected) return;
-    const { data } = await supabaseAdmin
-      .from('tournaments')
-      .select('tournament_password')
-      .eq('id', selected.id)
-      .maybeSingle();
-    if (!data || data.tournament_password !== password) {
-      setStatus('error');
-      return;
-    }
-    setStatus('idle');
-    setUnlockedIds((prev) => [...prev, selected.id]);
-    await loadTeams(selected.id);
+    setTeams([]);
+    setBrRows([]);
+    if (t) await loadTeams(id);
   };
 
   const handleChangeBrRow = (index, field, value) => {
@@ -104,8 +82,6 @@ export function ResultsPage() {
     if (!selected) return;
     setStatus('saving');
 
-    // ✅ Fix: long_br_matches has no tournament_id column.
-    // Fetch (or create) the long_brackets row first, then upsert the match via bracket_id.
     let bracketId;
     {
       const { data: existingBracket, error: bracketFetchErr } = await supabaseAdmin
@@ -115,7 +91,6 @@ export function ResultsPage() {
         .maybeSingle();
 
       if (bracketFetchErr) {
-        // eslint-disable-next-line no-console
         console.error(bracketFetchErr);
         notify('Failed to load bracket record.', 'error');
         setStatus('idle');
@@ -125,7 +100,6 @@ export function ResultsPage() {
       if (existingBracket) {
         bracketId = existingBracket.id;
       } else {
-        // Auto-create a bracket row for single-match BR tournaments
         const { data: newBracket, error: bracketCreateErr } = await supabaseAdmin
           .from('long_brackets')
           .insert({ tournament_id: selected.id, total_rounds: 1 })
@@ -133,7 +107,6 @@ export function ResultsPage() {
           .single();
 
         if (bracketCreateErr || !newBracket) {
-          // eslint-disable-next-line no-console
           console.error(bracketCreateErr);
           notify('Failed to create bracket record.', 'error');
           setStatus('idle');
@@ -143,7 +116,6 @@ export function ResultsPage() {
       }
     }
 
-    // Upsert the match row using bracket_id + match_number as the unique key
     const { data: matchData, error: matchErr } = await supabaseAdmin
       .from('long_br_matches')
       .upsert(
@@ -154,7 +126,6 @@ export function ResultsPage() {
       .single();
 
     if (matchErr || !matchData) {
-      // eslint-disable-next-line no-console
       console.error(matchErr);
       notify('Failed to create match record.', 'error');
       setStatus('idle');
@@ -174,7 +145,6 @@ export function ResultsPage() {
       .upsert(payload, { onConflict: 'match_id,team_name' });
 
     if (scoresErr) {
-      // eslint-disable-next-line no-console
       console.error(scoresErr);
       notify('Failed to save scores.', 'error');
       setStatus('idle');
@@ -195,74 +165,43 @@ export function ResultsPage() {
     setStatus('idle');
   };
 
-  const unlocked = selected && unlockedIds.includes(selected.id);
   const isSingleBR = selected && selected.type === 'single' && selected.mode === 'br';
 
   return (
     <div className="space-y-4">
-      {/* ✅ Fix: pass message/type/onClose as separate props, not a toast object */}
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-slate-50">Results entry</h1>
         <p className="text-xs text-slate-400">
-          Secure entry for match results. Passwords are per tournament.
+          Enter match results and notify players automatically.
         </p>
       </header>
 
       <section className="space-y-3">
         <div className="card space-y-3 text-xs">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-end">
-            <div>
-              <label className="label" htmlFor="tournament">
-                Tournament
-              </label>
-              <select
-                id="tournament"
-                className="input"
-                value={selected?.id || ''}
-                onChange={(e) => handleSelectTournament(e.target.value)}
-              >
-                <option value="">Select tournament</option>
-                {tournaments.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title} · {t.type} · {t.mode}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {selected && !unlocked && (
-              <div>
-                <label className="label" htmlFor="password">
-                  Tournament password
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    id="password"
-                    type="password"
-                    className="input"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <button type="button" className="btn-primary" onClick={handleUnlock}>
-                    Unlock
-                  </button>
-                </div>
-                {status === 'error' && (
-                  <p className="mt-1 text-11px text-red-400">Incorrect password.</p>
-                )}
-              </div>
-            )}
-            {selected && unlocked && (
-              <p className="text-11px text-emerald-300">
-                Password verified for this session. You can enter results safely.
-              </p>
-            )}
+          <div>
+            <label className="label" htmlFor="tournament">
+              Tournament
+            </label>
+            <select
+              id="tournament"
+              className="input"
+              value={selected?.id || ''}
+              onChange={(e) => handleSelectTournament(e.target.value)}
+            >
+              <option value="">Select tournament</option>
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title} · {t.type} · {t.mode}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </section>
 
-      {selected && unlocked && isSingleBR && (
+      {selected && isSingleBR && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-slate-100">
             Single match · Battle Royale
@@ -336,7 +275,7 @@ export function ResultsPage() {
         </section>
       )}
 
-      {selected && unlocked && !isSingleBR && (
+      {selected && !isSingleBR && (
         <section className="card text-xs text-slate-300">
           <p>
             This tournament mode uses long BR standings or bracket winners. You can extend this
