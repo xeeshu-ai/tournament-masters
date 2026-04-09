@@ -5,9 +5,10 @@ import { Toast } from '../components/Toast';
 const FILTERS = ['all', 'pending', 'confirmed'];
 
 export function PaymentsPage() {
-  const [requests, setRequests] = React.useState([]);
+  const [registrations, setRegistrations] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [filter, setFilter] = React.useState('pending');
+  const [filter, setFilter] = React.useState('all');
+  const [search, setSearch] = React.useState('');
   const [toast, setToast] = React.useState(null);
 
   const notify = (message, type = 'success') => {
@@ -17,167 +18,231 @@ export function PaymentsPage() {
 
   const load = async () => {
     setLoading(true);
-    // Fix: join players via host_player_id FK, use actual column names fullname/ffuid
     const { data, error } = await supabaseAdmin
-      .from('payment_requests')
-      .select('*, tournaments(title, filled_slots), players!host_player_id(fullname, ffuid)')
-      .order('created_at', { ascending: true });
-    if (error) {
-      // eslint-disable-next-line no-console
-      console.error(error);
-    }
-    setRequests(data || []);
+      .from('tournament_registrations')
+      .select(`
+        id,
+        host_uid,
+        team_name,
+        team_members_summary,
+        teammate_uid_1,
+        teammate_uid_2,
+        teammate_uid_3,
+        status,
+        razorpay_order_id,
+        payment_id,
+        slot_reserved_at,
+        created_at,
+        tournaments ( id, title, entry_fee, mode, format_label ),
+        players!host_player_id ( full_name, ff_uid, phone )
+      `)
+      .order('created_at', { ascending: false });
+    if (error) console.error(error);
+    setRegistrations(data || []);
     setLoading(false);
   };
 
-  React.useEffect(() => {
-    load();
-  }, []);
+  React.useEffect(() => { load(); }, []);
 
-  const handleConfirm = async (req) => {
-    // 1. Mark payment as confirmed
-    const { error: payErr } = await supabaseAdmin
-      .from('payment_requests')
-      .update({ status: 'confirmed' })
-      .eq('id', req.id);
-    if (payErr) {
-      // eslint-disable-next-line no-console
-      console.error(payErr);
-      notify('Failed to confirm payment.', 'error');
-      return;
-    }
+  const filtered = registrations.filter((r) => {
+    const matchStatus = filter === 'all' ? true : r.status === filter;
+    if (!search.trim()) return matchStatus;
+    const q = search.toLowerCase();
+    return matchStatus && (
+      r.host_uid?.toLowerCase().includes(q) ||
+      r.team_name?.toLowerCase().includes(q) ||
+      r.players?.full_name?.toLowerCase().includes(q) ||
+      r.razorpay_order_id?.toLowerCase().includes(q) ||
+      r.payment_id?.toLowerCase().includes(q) ||
+      r.tournaments?.title?.toLowerCase().includes(q)
+    );
+  });
 
-    // 2. Upsert registration — onConflict prevents duplicate rows
-    await supabaseAdmin
-      .from('tournament_registrations')
-      .upsert(
-        {
-          tournament_id: req.tournament_id,
-          host_player_id: req.host_player_id,
-          host_uid: req.host_uid,
-          team_name: req.team_name,
-          team_members_summary: req.team_members_summary,
-          status: 'confirmed',
-        },
-        { onConflict: 'tournament_id,host_player_id' },
-      );
+  const totalRevenue = registrations
+    .filter((r) => r.status === 'confirmed' && r.payment_id)
+    .reduce((sum, r) => sum + Number(r.tournaments?.entry_fee || 0), 0);
 
-    // 3. Increment filled_slots safely using a fresh read to avoid stale-value race
-    const { data: fresh } = await supabaseAdmin
-      .from('tournaments')
-      .select('filled_slots')
-      .eq('id', req.tournament_id)
-      .maybeSingle();
-    await supabaseAdmin
-      .from('tournaments')
-      .update({ filled_slots: (fresh?.filled_slots || 0) + 1 })
-      .eq('id', req.tournament_id);
-
-    // 4. Notify the player — correct schema: player_id, title, body, type
-    if (req.host_player_id) {
-      await supabaseAdmin.from('notifications').insert({
-        player_id: req.host_player_id,
-        title: 'Payment Confirmed',
-        body: `Your payment for ${
-          req.tournaments?.title || 'the tournament'
-        } has been confirmed. You're in!`,
-        type: 'payment',
-      });
-    }
-
-    notify('Payment confirmed and slot granted.');
-    load();
-  };
-
-  const visible = requests.filter((r) => (filter === 'all' ? true : r.status === filter));
+  const pendingCount = registrations.filter(
+    (r) => r.status === 'pending' && r.razorpay_order_id
+  ).length;
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center justify-between gap-3">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-50">Payment confirmations</h1>
+          <h1 className="text-xl font-semibold text-slate-50">Payments</h1>
           <p className="text-xs text-slate-400">
-            Confirm manual payments and grant tournament slots.
+            Automatic Razorpay payments — all registrations with payment info.
           </p>
         </div>
+        {/* KPI pills */}
+        <div className="flex flex-wrap gap-2 text-[11px]">
+          <div className="rounded-lg bg-slate-800/60 px-3 py-1.5 ring-1 ring-slate-700">
+            <span className="text-slate-400">Total confirmed revenue</span>
+            <p className="font-semibold text-emerald-400">₹{totalRevenue.toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-slate-800/60 px-3 py-1.5 ring-1 ring-slate-700">
+            <span className="text-slate-400">Pending payments</span>
+            <p className="font-semibold text-amber-400">{pendingCount}</p>
+          </div>
+          <div className="rounded-lg bg-slate-800/60 px-3 py-1.5 ring-1 ring-slate-700">
+            <span className="text-slate-400">Total registrations</span>
+            <p className="font-semibold text-slate-100">{registrations.length}</p>
+          </div>
+        </div>
+      </header>
+
+      {/* Filters + Search */}
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1">
           {FILTERS.map((f) => (
             <button
               key={f}
               type="button"
-              className={
-                'chip-tab ' + (filter === f ? 'chip-tab--active' : 'hover:bg-slate-900/80')
-              }
+              className={'chip-tab ' + (filter === f ? 'chip-tab--active' : 'hover:bg-slate-900/80')}
               onClick={() => setFilter(f)}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
         </div>
-      </header>
+        <input
+          type="search"
+          placeholder="Search UID, name, Order ID, Payment ID, tournament…"
+          className="input w-72 text-[11px]"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
       <div className="card overflow-x-auto text-xs">
         {loading ? (
-          <p className="text-xs text-slate-400">Loading payment requests…</p>
-        ) : visible.length === 0 ? (
-          <p className="text-xs text-slate-400">No payment requests.</p>
+          <p className="text-xs text-slate-400">Loading payments…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-xs text-slate-400">No registrations match this filter.</p>
         ) : (
           <table className="table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>Host UID</th>
-                <th>Player name</th>
+                <th>Player</th>
+                <th>UID</th>
                 <th>Tournament</th>
-                <th>Team name</th>
-                <th>Team members</th>
-                <th>Requested at</th>
+                <th>Tournament ID</th>
+                <th>Amount Paid</th>
+                <th>Team</th>
+                <th>Teammates</th>
+                <th>Order ID</th>
+                <th>Payment ID</th>
+                <th>Paid At</th>
                 <th>Status</th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
-              {visible.map((r, idx) => (
-                <tr key={r.id}>
-                  <td>{idx + 1}</td>
-                  <td>{r.host_uid}</td>
-                  <td>{r.players?.fullname || '—'}</td>
-                  <td>{r.tournaments?.title || '—'}</td>
-                  <td>{r.team_name}</td>
-                  <td>{r.team_members_summary}</td>
-                  <td>{new Date(r.created_at).toLocaleString()}</td>
-                  <td>
-                    <span
-                      className={
-                        'status-pill ' +
-                        (r.status === 'pending' ? 'pending' : 'approved')
-                      }
-                    >
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    {r.status === 'pending' && (
-                      <button
-                        type="button"
-                        className="btn-primary text-11px"
-                        onClick={() => handleConfirm(r)}
+              {filtered.map((r, idx) => {
+                const teammates = [r.teammate_uid_1, r.teammate_uid_2, r.teammate_uid_3].filter(Boolean);
+                return (
+                  <tr key={r.id}>
+                    <td className="text-slate-500">{idx + 1}</td>
+
+                    {/* Player */}
+                    <td>
+                      <div>{r.players?.full_name || '—'}</div>
+                      {r.players?.phone && (
+                        <div className="text-[10px] text-slate-500">{r.players.phone}</div>
+                      )}
+                    </td>
+
+                    {/* UID */}
+                    <td className="font-mono">{r.host_uid}</td>
+
+                    {/* Tournament title */}
+                    <td>
+                      <div>{r.tournaments?.title || '—'}</div>
+                      <div className="text-[10px] text-slate-500 uppercase">
+                        {r.tournaments?.mode} · {r.tournaments?.format_label}
+                      </div>
+                    </td>
+
+                    {/* Tournament ID — short form for readability */}
+                    <td>
+                      <span
+                        className="font-mono text-[10px] text-slate-400 cursor-pointer hover:text-slate-200"
+                        title={r.tournaments?.id}
+                        onClick={() => navigator.clipboard?.writeText(r.tournaments?.id || '')}
                       >
-                        Confirm
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                        {r.tournaments?.id ? r.tournaments.id.slice(0, 8) + '…' : '—'}
+                      </span>
+                    </td>
+
+                    {/* Amount */}
+                    <td>
+                      {r.tournaments?.entry_fee != null ? (
+                        <span className="font-semibold text-emerald-400">
+                          ₹{Number(r.tournaments.entry_fee).toLocaleString()}
+                        </span>
+                      ) : '—'}
+                    </td>
+
+                    {/* Team name */}
+                    <td>{r.team_name || '—'}</td>
+
+                    {/* Teammates */}
+                    <td>
+                      {teammates.length > 0 ? (
+                        <div className="space-y-0.5">
+                          {teammates.map((uid, i) => (
+                            <div key={i} className="font-mono text-[10px] text-slate-400">{uid}</div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-600">Solo</span>
+                      )}
+                    </td>
+
+                    {/* Razorpay Order ID */}
+                    <td>
+                      {r.razorpay_order_id ? (
+                        <span className="font-mono text-[10px] text-sky-400">{r.razorpay_order_id}</span>
+                      ) : (
+                        <span className="text-slate-600 text-[10px]">No order</span>
+                      )}
+                    </td>
+
+                    {/* Razorpay Payment ID */}
+                    <td>
+                      {r.payment_id ? (
+                        <span className="font-mono text-[10px] text-emerald-400">{r.payment_id}</span>
+                      ) : (
+                        <span className="text-slate-600 text-[10px]">Not paid</span>
+                      )}
+                    </td>
+
+                    {/* Paid at */}
+                    <td className="text-slate-400 whitespace-nowrap">
+                      {r.slot_reserved_at
+                        ? new Date(r.slot_reserved_at).toLocaleString('en-IN', {
+                            day: '2-digit', month: 'short', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                          })
+                        : '—'}
+                    </td>
+
+                    {/* Status */}
+                    <td>
+                      <span className={'status-pill ' + (r.status === 'confirmed' ? 'approved' : r.status === 'pending' ? 'pending' : '')}>
+                        {r.status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
-      <Toast
-        message={toast?.message}
-        type={toast?.type}
-        onClose={() => setToast(null)}
-      />
+
+      <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
     </div>
   );
 }
