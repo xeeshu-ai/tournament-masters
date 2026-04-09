@@ -25,20 +25,16 @@ export const BR_SLOT_OPTIONS = {
 };
 
 /**
- * Standard additive Free Fire BR scoring:
- *   - Placement points: 1st=12, 2nd=9, 3rd=8, 4th=7, ... 10th=1, 11th+=0
- *   - Kill points: 1 point per kill
+ * Custom Free Fire BR scoring formula:
+ *   Points = ((kills + 1) / position) * 100
  *
- * Previous formula ((k+1)/p)*100 was multiplicative and gave higher-placement
- * teams fewer points than kill-heavy lower-placement teams, which was incorrect.
+ * Higher kills + lower position = more points.
+ * Position defaults to 1 if not provided to avoid division by zero.
  */
-const PLACEMENT_POINTS = [12, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-
 export function calculateBrPoints(kills, position) {
   const k = Math.max(Number(kills || 0), 0);
   const p = Math.max(Number(position || 1), 1);
-  const placementPts = PLACEMENT_POINTS[p - 1] ?? 0;
-  return placementPts + k;
+  return Math.round(((k + 1) / p) * 100);
 }
 
 export function isPowerOfTwo(n) {
