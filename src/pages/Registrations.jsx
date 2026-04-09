@@ -26,10 +26,11 @@ function StatusPill({ status }) {
 
 // ─── Team card ───────────────────────────────────────────────────────────────
 function TeamCard({ reg, idx, onRemove }) {
+  // Correct column names: member_2_uid, member_3_uid, member_4_uid
   const teammates = [
-    reg.teammate_uid_1,
-    reg.teammate_uid_2,
-    reg.teammate_uid_3,
+    reg.member_2_uid,
+    reg.member_3_uid,
+    reg.member_4_uid,
   ].filter(Boolean);
 
   return (
@@ -57,7 +58,7 @@ function TeamCard({ reg, idx, onRemove }) {
 
       {/* Host row */}
       <div className="rounded-lg bg-slate-950/60 px-3 py-2 space-y-0.5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Host</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Host (Member 1)</p>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
           <span className="text-slate-200">{reg.players?.fullname || '—'}</span>
           <span className="font-mono text-sky-300">{reg.host_uid}</span>
@@ -67,10 +68,12 @@ function TeamCard({ reg, idx, onRemove }) {
       {/* Teammates */}
       {teammates.length > 0 && (
         <div className="rounded-lg bg-slate-950/60 px-3 py-2 space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Teammates</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Teammates ({teammates.length})
+          </p>
           {teammates.map((uid, i) => (
             <div key={i} className="flex items-center gap-2">
-              <span className="text-slate-500">{i + 1}.</span>
+              <span className="text-slate-500">Member {i + 2}:</span>
               <span className="font-mono text-slate-300">{uid}</span>
             </div>
           ))}
@@ -82,6 +85,19 @@ function TeamCard({ reg, idx, onRemove }) {
         <div className="rounded-lg bg-slate-950/60 px-3 py-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Team members (summary)</p>
           <p className="text-slate-400 whitespace-pre-line">{reg.team_members_summary}</p>
+        </div>
+      )}
+
+      {/* Payment info */}
+      {(reg.razorpay_order_id || reg.payment_id) && (
+        <div className="rounded-lg bg-slate-950/60 px-3 py-2 space-y-0.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Payment</p>
+          {reg.razorpay_order_id && (
+            <p className="font-mono text-[11px] text-slate-400">Order: {reg.razorpay_order_id}</p>
+          )}
+          {reg.payment_id && (
+            <p className="font-mono text-[11px] text-slate-400">Payment: {reg.payment_id}</p>
+          )}
         </div>
       )}
 
@@ -179,7 +195,6 @@ export function RegistrationsPage() {
   const load = async () => {
     setLoading(true);
 
-    // Load all non-archived tournaments
     const { data: tData, error: tErr } = await supabaseAdmin
       .from('tournaments')
       .select('id, title, mode, format_label, start_time, registration_status, is_archived, filled_slots, max_slots')
@@ -191,17 +206,33 @@ export function RegistrationsPage() {
       return;
     }
 
-    // Load all registrations joined with player name
+    // Load all registrations — select correct teammate columns
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
-      .select('*, players!host_player_id(fullname, ffuid)')
+      .select(`
+        id,
+        tournament_id,
+        host_uid,
+        host_player_id,
+        team_name,
+        team_members_summary,
+        status,
+        created_at,
+        member_2_uid,
+        member_3_uid,
+        member_4_uid,
+        razorpay_order_id,
+        payment_id,
+        slot_reserved_at,
+        players!host_player_id(fullname, ffuid)
+      `)
       .order('created_at', { ascending: true });
 
     if (rErr) {
       console.error(rErr);
     }
 
-    // Group registrations by tournament_id
+    // Group by tournament_id
     const grouped = {};
     for (const reg of rData || []) {
       if (!grouped[reg.tournament_id]) grouped[reg.tournament_id] = [];
@@ -254,20 +285,18 @@ export function RegistrationsPage() {
     .filter(t => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
-      // Match tournament title OR any UID / team name in its registrations
       if (t.title.toLowerCase().includes(q)) return true;
       const regs = regsByTournament[t.id] || [];
       return regs.some(r =>
         r.host_uid?.toLowerCase().includes(q) ||
         r.team_name?.toLowerCase().includes(q) ||
         r.players?.fullname?.toLowerCase().includes(q) ||
-        r.teammate_uid_1?.toLowerCase().includes(q) ||
-        r.teammate_uid_2?.toLowerCase().includes(q) ||
-        r.teammate_uid_3?.toLowerCase().includes(q)
+        r.member_2_uid?.toLowerCase().includes(q) ||
+        r.member_3_uid?.toLowerCase().includes(q) ||
+        r.member_4_uid?.toLowerCase().includes(q)
       );
     });
 
-  // Total counts for header stats
   const totalRegs = Object.values(regsByTournament).reduce((s, a) => s + a.length, 0);
   const confirmedRegs = Object.values(regsByTournament)
     .flat()
