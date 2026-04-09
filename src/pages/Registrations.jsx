@@ -13,87 +13,146 @@ function fmtDate(str) {
 function StatusPill({ status }) {
   const map = {
     confirmed: 'bg-emerald-900/50 text-emerald-300',
-    pending: 'bg-amber-900/50 text-amber-300',
-    rejected: 'bg-red-900/50 text-red-400',
-    expired: 'bg-slate-800 text-slate-400',
+    pending:   'bg-amber-900/50  text-amber-300',
+    rejected:  'bg-red-900/50    text-red-400',
+    expired:   'bg-slate-800     text-slate-400',
   };
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${map[status] || 'bg-slate-800 text-slate-400'}`}>
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+      map[status] || 'bg-slate-800 text-slate-400'
+    }`}>
       {status || 'unknown'}
     </span>
   );
 }
 
+// Parse team_members_summary into an array of { name, uid } objects.
+// Supports common formats:
+//   "Name - UID\nName - UID"
+//   "Name: UID\nName: UID"
+//   plain UIDs one per line
+function parseSummary(summary) {
+  if (!summary) return [];
+  return summary
+    .split(/\n|,/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const sep = line.includes(' - ') ? ' - ' : line.includes(': ') ? ': ' : null;
+      if (sep) {
+        const [name, uid] = line.split(sep);
+        return { name: name?.trim() || null, uid: uid?.trim() || line };
+      }
+      return { name: null, uid: line };
+    });
+}
+
+// ─── Team Card (collapsible) ──────────────────────────────────────────────────────
 function TeamCard({ reg, idx, onRemove }) {
-  const teammates = [reg.member_2_uid, reg.member_3_uid, reg.member_4_uid].filter(Boolean);
+  const [open, setOpen] = React.useState(false);
+
+  // Individual UID columns first, fall back to parsed summary
+  const membersFromCols = [
+    reg.member_2_uid ? { name: null, uid: reg.member_2_uid } : null,
+    reg.member_3_uid ? { name: null, uid: reg.member_3_uid } : null,
+    reg.member_4_uid ? { name: null, uid: reg.member_4_uid } : null,
+  ].filter(Boolean);
+
+  const membersFromSummary = parseSummary(reg.team_members_summary);
+
+  // Use individual columns if any are filled, else fall back to summary
+  const teammates = membersFromCols.length > 0 ? membersFromCols : membersFromSummary;
+
+  const totalMembers = 1 + teammates.length; // host + rest
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 space-y-2 text-xs">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-900/60 text-[10px] font-bold text-sky-300">
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 text-xs overflow-hidden">
+      {/* ─ Accordion header ─ */}
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-800/40 transition-colors"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-sky-900/60 text-[10px] font-bold text-sky-300">
             {idx + 1}
           </span>
-          <span className="font-semibold text-slate-50">{reg.team_name || 'Unnamed team'}</span>
+          <span className="font-semibold text-slate-50 truncate">{reg.team_name || 'Unnamed team'}</span>
+          <span className="text-slate-500 flex-shrink-0">{totalMembers} member{totalMembers !== 1 ? 's' : ''}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <StatusPill status={reg.status} />
           <button
             type="button"
             className="rounded px-2 py-0.5 text-[11px] bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
-            onClick={() => onRemove(reg)}
+            onClick={(e) => { e.stopPropagation(); onRemove(reg); }}
             title="Remove registration"
           >
             Remove
           </button>
+          <svg
+            className={`h-3.5 w-3.5 text-slate-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
         </div>
-      </div>
+      </button>
 
-      <div className="rounded-lg bg-slate-950/60 px-3 py-2 space-y-0.5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Host (Member 1)</p>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
-          <span className="text-slate-200">{reg.host_name || 'Name not linked'}</span>
-          <span className="font-mono text-sky-300">{reg.host_uid}</span>
-        </div>
-      </div>
+      {/* ─ Expanded details ─ */}
+      {open && (
+        <div className="border-t border-slate-800 px-3 py-2.5 space-y-2.5">
 
-      {teammates.length > 0 && (
-        <div className="rounded-lg bg-slate-950/60 px-3 py-2 space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Teammates ({teammates.length})
-          </p>
-          {teammates.map((uid, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="text-slate-500">Member {i + 2}:</span>
-              <span className="font-mono text-slate-300">{uid}</span>
+          {/* Host */}
+          <div className="rounded-lg bg-slate-950/70 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-1">Host (Member 1)</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+              {reg.host_name
+                ? <span className="text-slate-100 font-medium">{reg.host_name}</span>
+                : <span className="text-slate-500 italic">Name not linked</span>
+              }
+              <span className="font-mono text-sky-300 select-all">{reg.host_uid}</span>
             </div>
-          ))}
+          </div>
+
+          {/* Teammates */}
+          {teammates.length > 0 ? (
+            <div className="rounded-lg bg-slate-950/70 px-3 py-2 space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Teammates ({teammates.length})
+              </p>
+              {teammates.map((m, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                  <span className="text-slate-500 w-16 flex-shrink-0">Member {i + 2}:</span>
+                  {m.name && <span className="text-slate-200">{m.name}</span>}
+                  <span className="font-mono text-slate-300 select-all">{m.uid}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-600 italic">No teammate UIDs recorded.</p>
+          )}
+
+          {/* Payment */}
+          {(reg.razorpay_order_id || reg.payment_id) && (
+            <div className="rounded-lg bg-slate-950/70 px-3 py-2 space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-1">Payment</p>
+              {reg.razorpay_order_id && <p className="font-mono text-[11px] text-slate-400">Order: {reg.razorpay_order_id}</p>}
+              {reg.payment_id     && <p className="font-mono text-[11px] text-slate-400">Payment ID: {reg.payment_id}</p>}
+            </div>
+          )}
+
+          <p className="text-[11px] text-slate-600">Registered: {fmtDate(reg.created_at)}</p>
         </div>
       )}
-
-      {teammates.length === 0 && reg.team_members_summary && (
-        <div className="rounded-lg bg-slate-950/60 px-3 py-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Team members</p>
-          <p className="text-slate-400 whitespace-pre-line">{reg.team_members_summary}</p>
-        </div>
-      )}
-
-      {(reg.razorpay_order_id || reg.payment_id) && (
-        <div className="rounded-lg bg-slate-950/60 px-3 py-2 space-y-0.5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Payment</p>
-          {reg.razorpay_order_id && <p className="font-mono text-[11px] text-slate-400">Order: {reg.razorpay_order_id}</p>}
-          {reg.payment_id && <p className="font-mono text-[11px] text-slate-400">Payment: {reg.payment_id}</p>}
-        </div>
-      )}
-
-      <p className="text-[11px] text-slate-600">Registered: {fmtDate(reg.created_at)}</p>
     </div>
   );
 }
 
+// ─── Tournament Section (collapsible) ───────────────────────────────────────────────
 function TournamentSection({ tournament, registrations, onRemove }) {
   const [open, setOpen] = React.useState(true);
-  const total = registrations.length;
+  const total     = registrations.length;
   const confirmed = registrations.filter((r) => r.status === 'confirmed').length;
 
   return (
@@ -116,11 +175,10 @@ function TournamentSection({ tournament, registrations, onRemove }) {
           )}
         </div>
         <svg
-          className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
+          className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200 ${
+            open ? 'rotate-180' : ''
+          }`}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -131,7 +189,9 @@ function TournamentSection({ tournament, registrations, onRemove }) {
           {total === 0 ? (
             <p className="text-[11px] text-slate-500">No registrations yet for this tournament.</p>
           ) : (
-            registrations.map((reg, i) => <TeamCard key={reg.id} reg={reg} idx={i} onRemove={onRemove} />)
+            registrations.map((reg, i) => (
+              <TeamCard key={reg.id} reg={reg} idx={i} onRemove={onRemove} />
+            ))
           )}
         </div>
       )}
@@ -139,6 +199,7 @@ function TournamentSection({ tournament, registrations, onRemove }) {
   );
 }
 
+// ─── Remove dialog ───────────────────────────────────────────────────────────────
 function RemoveDialog({ reg, onCancel, onConfirm }) {
   if (!reg) return null;
   return (
@@ -146,54 +207,66 @@ function RemoveDialog({ reg, onCancel, onConfirm }) {
       <div className="card w-full max-w-sm space-y-4">
         <h2 className="text-sm font-semibold text-slate-50">Remove registration?</h2>
         <p className="text-xs text-slate-300">
-          Remove <span className="font-semibold text-slate-50">{reg.team_name || 'this team'}</span> (host UID:{' '}
-          <span className="font-mono text-sky-300">{reg.host_uid}</span>) from the tournament? This will also decrement the filled slots counter.
+          Remove <span className="font-semibold text-slate-50">{reg.team_name || 'this team'}</span>{' '}
+          (host UID: <span className="font-mono text-sky-300">{reg.host_uid}</span>) from the tournament?
+          This will also decrement the filled slots counter.
         </p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary text-xs" onClick={onCancel}>Cancel</button>
-          <button type="button" className="text-xs rounded px-3 py-1.5 bg-red-700 text-white hover:bg-red-600 transition-colors" onClick={onConfirm}>Remove</button>
+          <button
+            type="button"
+            className="text-xs rounded px-3 py-1.5 bg-red-700 text-white hover:bg-red-600 transition-colors"
+            onClick={onConfirm}
+          >
+            Remove
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
+// ─── Main page ────────────────────────────────────────────────────────────────
 export function RegistrationsPage() {
-  const [tournaments, setTournaments] = React.useState([]);
+  const [tournaments,      setTournaments]      = React.useState([]);
   const [regsByTournament, setRegsByTournament] = React.useState({});
-  const [loading, setLoading] = React.useState(true);
-  const [search, setSearch] = React.useState('');
-  const [removeTarget, setRemoveTarget] = React.useState(null);
-  const [toast, setToast] = React.useState(null);
-  const [filter, setFilter] = React.useState('active');
+  const [loading,          setLoading]          = React.useState(true);
+  const [search,           setSearch]           = React.useState('');
+  const [removeTarget,     setRemoveTarget]     = React.useState(null);
+  const [toast,            setToast]            = React.useState(null);
+  const [filter,           setFilter]           = React.useState('active');
 
-  const notify = (message, type = 'success') => {
-    setToast({ message, type });
+  const notify = (msg, type = 'success') => {
+    setToast({ message: msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
   const load = async () => {
     setLoading(true);
 
+    // 1. Tournaments
     const { data: tData, error: tErr } = await supabaseAdmin
       .from('tournaments')
       .select('id, title, mode, format_label, start_time, registration_status, is_archived, filled_slots, max_slots')
       .order('start_time', { ascending: false });
 
     if (tErr) {
-      console.error(tErr);
+      console.error('tournaments fetch error:', tErr);
       notify('Failed to load tournaments.', 'error');
       setLoading(false);
       return;
     }
 
+    // 2. Registrations (no join)
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
-      .select('id, tournament_id, host_uid, host_player_id, team_name, team_members_summary, status, created_at, member_2_uid, member_3_uid, member_4_uid, razorpay_order_id, payment_id, slot_reserved_at')
+      .select(
+        'id, tournament_id, host_uid, host_player_id, team_name, team_members_summary, status, created_at, member_2_uid, member_3_uid, member_4_uid, razorpay_order_id, payment_id'
+      )
       .order('created_at', { ascending: true });
 
     if (rErr) {
-      console.error(rErr);
+      console.error('registrations fetch error:', rErr);
       notify('Failed to load registrations.', 'error');
       setTournaments(tData || []);
       setRegsByTournament({});
@@ -201,28 +274,27 @@ export function RegistrationsPage() {
       return;
     }
 
+    // 3. Fetch player names from players table by ff_uid (correct column)
     const hostUids = [...new Set((rData || []).map((r) => r.host_uid).filter(Boolean))];
-    let playerNameMap = {};
+    let nameMap = {};
 
     if (hostUids.length > 0) {
       const { data: pData, error: pErr } = await supabaseAdmin
         .from('players')
-        .select('ffuid, fullname')
-        .in('ffuid', hostUids);
+        .select('ff_uid, full_name')
+        .in('ff_uid', hostUids);
 
       if (pErr) {
-        console.error(pErr);
+        console.error('players name fetch error:', pErr);
       } else {
-        playerNameMap = Object.fromEntries((pData || []).map((p) => [p.ffuid, p.fullname]));
+        nameMap = Object.fromEntries((pData || []).map((p) => [p.ff_uid, p.full_name]));
       }
     }
 
+    // 4. Group registrations by tournament, attach resolved host_name
     const grouped = {};
     for (const reg of rData || []) {
-      const row = {
-        ...reg,
-        host_name: playerNameMap[reg.host_uid] || null,
-      };
+      const row = { ...reg, host_name: nameMap[reg.host_uid] || null };
       if (!grouped[reg.tournament_id]) grouped[reg.tournament_id] = [];
       grouped[reg.tournament_id].push(row);
     }
@@ -232,15 +304,17 @@ export function RegistrationsPage() {
     setLoading(false);
   };
 
-  React.useEffect(() => {
-    load();
-  }, []);
+  React.useEffect(() => { load(); }, []);
 
+  // Remove registration
   const handleRemoveConfirmed = async () => {
     const reg = removeTarget;
     if (!reg) return;
 
-    const { error } = await supabaseAdmin.from('tournament_registrations').delete().eq('id', reg.id);
+    const { error } = await supabaseAdmin
+      .from('tournament_registrations')
+      .delete()
+      .eq('id', reg.id);
 
     if (error) {
       console.error(error);
@@ -265,6 +339,7 @@ export function RegistrationsPage() {
     load();
   };
 
+  // Filter + search
   const visibleTournaments = tournaments
     .filter((t) => (filter === 'all' ? true : !t.is_archived))
     .filter((t) => {
@@ -284,11 +359,12 @@ export function RegistrationsPage() {
       );
     });
 
-  const totalRegs = Object.values(regsByTournament).reduce((s, a) => s + a.length, 0);
+  const totalRegs     = Object.values(regsByTournament).reduce((s, a) => s + a.length, 0);
   const confirmedRegs = Object.values(regsByTournament).flat().filter((r) => r.status === 'confirmed').length;
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-50">Registrations</h1>
@@ -310,6 +386,7 @@ export function RegistrationsPage() {
         </div>
       </header>
 
+      {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
@@ -335,11 +412,10 @@ export function RegistrationsPage() {
         </button>
       </div>
 
+      {/* List */}
       {loading ? (
         <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="card h-14 animate-pulse bg-slate-900/60" />
-          ))}
+          {[1, 2, 3].map((i) => <div key={i} className="card h-14 animate-pulse bg-slate-900/60" />)}
         </div>
       ) : visibleTournaments.length === 0 ? (
         <div className="card text-xs text-slate-400">No tournaments match your search.</div>
@@ -356,7 +432,11 @@ export function RegistrationsPage() {
         </div>
       )}
 
-      <RemoveDialog reg={removeTarget} onCancel={() => setRemoveTarget(null)} onConfirm={handleRemoveConfirmed} />
+      <RemoveDialog
+        reg={removeTarget}
+        onCancel={() => setRemoveTarget(null)}
+        onConfirm={handleRemoveConfirmed}
+      />
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
     </div>
   );
