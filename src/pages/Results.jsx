@@ -12,15 +12,23 @@ function teammateCount(teamSize) {
   return 3;
 }
 
-function buildPlayerNames(reg) {
-  const names = [reg.host_uid];
-  const mates = [reg.teammate_uid_1, reg.teammate_uid_2, reg.teammate_uid_3].filter(Boolean);
-  return [...names, ...mates];
+// Returns array of { uid, name } for a registration, using uidToName map
+function buildPlayerEntries(reg, uidToName) {
+  const all = [
+    reg.host_uid,
+    reg.teammate_uid_1,
+    reg.teammate_uid_2,
+    reg.teammate_uid_3,
+  ].filter(Boolean);
+  return all.map((uid) => ({
+    uid,
+    name: uidToName[uid] || uid, // fallback to UID if name not found
+  }));
 }
 
 // ─── CS / LW Result Entry ─────────────────────────────────────────────────────
 
-function CsLwResultEntry({ tournament, teams, onSaved }) {
+function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   const totalRounds = Number(tournament.total_rounds) || 13;
   const objectiveRounds = Math.ceil(totalRounds / 2) + 1;
 
@@ -32,7 +40,6 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
     return p;
   }, [teams]);
 
-  // ✅ FIX: initialise as empty array; sync whenever pairs changes (teams loads async)
   const [matchData, setMatchData] = React.useState([]);
 
   React.useEffect(() => {
@@ -74,13 +81,17 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
     setSaving(true);
     const matches = pairs.map((pair, i) => {
       const md = matchData[i];
-      const playersA = buildPlayerNames(pair.a).map(uid => ({
-        name: uid,
+      const entriesA = buildPlayerEntries(pair.a, uidToName);
+      const entriesB = buildPlayerEntries(pair.b, uidToName);
+      const playersA = entriesA.map(({ uid, name }) => ({
+        name,
+        uid,
         kills: Number(md.players[uid]?.kills || 0),
         deaths: Number(md.players[uid]?.deaths || 0),
       }));
-      const playersB = buildPlayerNames(pair.b).map(uid => ({
-        name: uid,
+      const playersB = entriesB.map(({ uid, name }) => ({
+        name,
+        uid,
         kills: Number(md.players[uid]?.kills || 0),
         deaths: Number(md.players[uid]?.deaths || 0),
       }));
@@ -123,7 +134,6 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
     );
   }
 
-  // Guard: matchData not yet synced (pairs loaded but effect hasn't run)
   if (matchData.length !== pairs.length) {
     return (
       <div className="card flex items-center gap-3 py-6 text-xs text-slate-400">
@@ -149,8 +159,8 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
       {pairs.map((pair, pairIdx) => {
         const md = matchData[pairIdx];
         if (!md) return null;
-        const playersA = buildPlayerNames(pair.a);
-        const playersB = buildPlayerNames(pair.b);
+        const entriesA = buildPlayerEntries(pair.a, uidToName);
+        const entriesB = buildPlayerEntries(pair.b, uidToName);
 
         return (
           <div key={pairIdx} className="card space-y-4">
@@ -161,7 +171,7 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
             <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
               <TeamPanel
                 team={pair.a}
-                players={playersA}
+                playerEntries={entriesA}
                 rounds={md.roundsA}
                 onRoundsChange={v => setRounds(pairIdx, 'a', v)}
                 playerStats={md.players}
@@ -194,7 +204,7 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
 
               <TeamPanel
                 team={pair.b}
-                players={playersB}
+                playerEntries={entriesB}
                 rounds={md.roundsB}
                 onRoundsChange={v => setRounds(pairIdx, 'b', v)}
                 playerStats={md.players}
@@ -213,7 +223,7 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
   );
 }
 
-function TeamPanel({ team, players, rounds, onRoundsChange, playerStats, onStatChange, isWinner }) {
+function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, onStatChange, isWinner }) {
   return (
     <div className={`rounded-xl border p-3 space-y-3 transition-colors ${
       isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'
@@ -245,9 +255,9 @@ function TeamPanel({ team, players, rounds, onRoundsChange, playerStats, onStatC
           <span className="text-center">Deaths</span>
         </div>
         <div className="space-y-1">
-          {players.map(uid => (
+          {playerEntries.map(({ uid, name }) => (
             <div key={uid} className="grid grid-cols-3 gap-1 items-center">
-              <span className="text-[11px] text-slate-200 truncate" title={uid}>{uid}</span>
+              <span className="text-[11px] text-slate-200 truncate" title={uid}>{name}</span>
               <input
                 type="number"
                 min="0"
@@ -274,7 +284,7 @@ function TeamPanel({ team, players, rounds, onRoundsChange, playerStats, onStatC
 
 // ─── BR Result Entry ──────────────────────────────────────────────────────────
 
-function BrResultEntry({ tournament, teams, brRows, onChangeBrRow, onSaveBr, saving, winnerText, setWinnerText }) {
+function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, onSaveBr, saving, winnerText, setWinnerText }) {
   return (
     <div className="space-y-4">
       <h2 className="text-sm font-semibold text-slate-100">Single Match · Battle Royale</h2>
@@ -286,26 +296,38 @@ function BrResultEntry({ tournament, teams, brRows, onChangeBrRow, onSaveBr, sav
             <thead>
               <tr>
                 <th>Team</th>
+                <th>Players</th>
                 <th>Kills</th>
                 <th>Position</th>
                 <th>Points (auto)</th>
               </tr>
             </thead>
             <tbody>
-              {brRows.map((row, idx) => (
-                <tr key={row.team_name}>
-                  <td>{row.team_name}</td>
-                  <td>
-                    <input type="number" className="input w-20 text-xs" value={row.kills}
-                      onChange={e => onChangeBrRow(idx, 'kills', e.target.value)} />
-                  </td>
-                  <td>
-                    <input type="number" className="input w-20 text-xs" value={row.position}
-                      onChange={e => onChangeBrRow(idx, 'position', e.target.value)} />
-                  </td>
-                  <td className="font-semibold text-sky-300">{row.points}</td>
-                </tr>
-              ))}
+              {brRows.map((row, idx) => {
+                const reg = teams[idx];
+                const entries = reg ? buildPlayerEntries(reg, uidToName) : [];
+                return (
+                  <tr key={row.team_name}>
+                    <td className="font-semibold">{row.team_name}</td>
+                    <td>
+                      <div className="space-y-0.5">
+                        {entries.map(({ uid, name }) => (
+                          <div key={uid} className="text-[11px] text-slate-300">{name}</div>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
+                      <input type="number" className="input w-20 text-xs" value={row.kills}
+                        onChange={e => onChangeBrRow(idx, 'kills', e.target.value)} />
+                    </td>
+                    <td>
+                      <input type="number" className="input w-20 text-xs" value={row.position}
+                        onChange={e => onChangeBrRow(idx, 'position', e.target.value)} />
+                    </td>
+                    <td className="font-semibold text-sky-300">{row.points}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -403,6 +425,7 @@ export function ResultsPage() {
   const [tournaments, setTournaments] = React.useState([]);
   const [selected, setSelected] = React.useState(null);
   const [teams, setTeams] = React.useState([]);
+  const [uidToName, setUidToName] = React.useState({});
   const [brRows, setBrRows] = React.useState([]);
   const [winnerText, setWinnerText] = React.useState('');
   const [status, setStatus] = React.useState('idle');
@@ -426,14 +449,43 @@ export function ResultsPage() {
   React.useEffect(() => { loadTournaments(); }, []);
 
   const loadTeams = async (tid) => {
-    const { data } = await supabaseAdmin
+    const { data: regsData } = await supabaseAdmin
       .from('tournament_registrations')
       .select('*')
       .eq('tournament_id', tid)
       .eq('status', 'confirmed');
-    setTeams(data || []);
+
+    const regs = regsData || [];
+    setTeams(regs);
+
+    // Collect all UIDs from all registrations
+    const allUids = [];
+    regs.forEach((r) => {
+      if (r.host_uid) allUids.push(r.host_uid);
+      if (r.teammate_uid_1) allUids.push(r.teammate_uid_1);
+      if (r.teammate_uid_2) allUids.push(r.teammate_uid_2);
+      if (r.teammate_uid_3) allUids.push(r.teammate_uid_3);
+    });
+
+    // Fetch player names for all collected UIDs
+    if (allUids.length > 0) {
+      const uniqueUids = [...new Set(allUids)];
+      const { data: playersData } = await supabaseAdmin
+        .from('players')
+        .select('ff_uid, full_name')
+        .in('ff_uid', uniqueUids);
+
+      const map = {};
+      (playersData || []).forEach((p) => {
+        map[p.ff_uid] = p.full_name || p.ff_uid;
+      });
+      setUidToName(map);
+    } else {
+      setUidToName({});
+    }
+
     setBrRows(
-      (data || []).map((r) => ({
+      regs.map((r) => ({
         team_name: r.team_name,
         host_player_id: r.host_player_id,
         kills: '',
@@ -448,6 +500,7 @@ export function ResultsPage() {
     setSelected(t);
     setWinnerText('');
     setTeams([]);
+    setUidToName({});
     setBrRows([]);
     if (t) await loadTeams(id);
   };
@@ -504,19 +557,25 @@ export function ResultsPage() {
 
     if (matchErr || !matchData) { notify('Failed to create match.', 'error'); setStatus('idle'); return; }
 
-    const payload = brRows.map((r) => ({
-      match_id: matchData.id,
-      team_name: r.team_name,
-      kills: Number(r.kills || 0),
-      position: Number(r.position || 0),
-      points: r.points,
-    }));
+    // Build payload — store player_names JSON alongside team scores
+    const payload = brRows.map((r, idx) => {
+      const reg = teams[idx];
+      const entries = reg ? buildPlayerEntries(reg, uidToName) : [];
+      return {
+        match_id: matchData.id,
+        team_name: r.team_name,
+        kills: Number(r.kills || 0),
+        position: Number(r.position || 0),
+        points: r.points,
+        player_names: entries.map(e => e.name),
+      };
+    });
 
     const { error: scoresErr } = await supabaseAdmin
       .from('long_br_match_scores')
       .upsert(payload, { onConflict: 'match_id,team_name' });
 
-    if (scoresErr) { notify('Failed to save scores.', 'error'); setStatus('idle'); return; }
+    if (scoresErr) { notify('Failed to save scores: ' + scoresErr.message, 'error'); setStatus('idle'); return; }
 
     if (winnerText.trim()) {
       await supabaseAdmin.from('tournaments').update({ winner_text: winnerText.trim() }).eq('id', selected.id);
@@ -567,6 +626,7 @@ export function ResultsPage() {
           <CsLwResultEntry
             tournament={selected}
             teams={teams}
+            uidToName={uidToName}
             onSaved={() => { notify('CS/LW results saved!'); loadTeams(selected.id); }}
           />
         </section>
@@ -578,6 +638,7 @@ export function ResultsPage() {
           <BrResultEntry
             tournament={selected}
             teams={teams}
+            uidToName={uidToName}
             brRows={brRows}
             onChangeBrRow={handleChangeBrRow}
             onSaveBr={handleSaveBr}
