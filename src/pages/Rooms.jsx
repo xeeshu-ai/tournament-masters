@@ -1,4 +1,3 @@
-
 import React from 'react';
 // ✅ Fix — use named imports
 import { supabaseAdmin } from '../supabaseClient';
@@ -21,9 +20,9 @@ export function RoomCodesPage() {
     async function loadTournaments() {
       const { data, error } = await supabaseAdmin
         .from('tournaments')
-        .select('id, title, type, mode, match_start_time')
+        .select('id, title, mode, mode_label, format_label, start_time')
         .eq('is_archived', false)
-        .order('match_start_time', { ascending: true });
+        .order('start_time', { ascending: true });
       if (error) {
         // eslint-disable-next-line no-console
         console.error(error);
@@ -55,7 +54,7 @@ export function RoomCodesPage() {
     setForm({
       room_id: data?.room_id || '',
       room_password: data?.room_password || '',
-      reveal_at: data?.reveal_at ? data.reveal_at.slice(0, 16) : '', // datetime-local
+      reveal_at: data?.reveal_at ? data.reveal_at.slice(0, 16) : '',
     });
   };
 
@@ -117,13 +116,17 @@ export function RoomCodesPage() {
 
   const selectedTournament = tournaments.find((t) => String(t.id) === String(selectedId));
   let revealHint = '';
-  if (form.reveal_at && selectedTournament?.match_start_time) {
+  if (form.reveal_at && selectedTournament?.start_time) {
     try {
       const reveal = new Date(form.reveal_at);
-      const start = new Date(selectedTournament.match_start_time);
+      const start = new Date(selectedTournament.start_time);
       const diffMs = start.getTime() - reveal.getTime();
       const diffMin = Math.round(diffMs / 60000);
-      revealHint = `${diffMin} minutes before match start.`;
+      if (diffMin >= 0) {
+        revealHint = `${diffMin} minutes before match start.`;
+      } else {
+        revealHint = `${Math.abs(diffMin)} minutes after match start.`;
+      }
     } catch (e) {
       // ignore
     }
@@ -151,19 +154,22 @@ export function RoomCodesPage() {
               onChange={(e) => handleSelect(e.target.value)}
             >
               <option value="">Select tournament</option>
-              {tournaments.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title} • {t.type} • {t.mode}
-                </option>
-              ))}
+              {tournaments.map((t) => {
+                const modeStr = [t.mode_label, t.format_label].filter(Boolean).join(' • ') || t.mode || '';
+                return (
+                  <option key={t.id} value={t.id}>
+                    {t.title}{modeStr ? ` • ${modeStr}` : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
           {selectedTournament && (
             <div className="text-11px text-slate-500">
               <p>
                 Match start:{' '}
-                {selectedTournament.match_start_time
-                  ? new Date(selectedTournament.match_start_time).toLocaleString()
+                {selectedTournament.start_time
+                  ? new Date(selectedTournament.start_time).toLocaleString()
                   : 'Not set'}
               </p>
               <p>
@@ -224,8 +230,8 @@ export function RoomCodesPage() {
           </div>
         </form>
         <p className="text-11px text-slate-500">
-          On the player side, reveal logic should show room ID and password only to eligible players
-          ({'>'}= 30 minutes before the match, and depending on solo / host rules).
+          Room details will only be shown to the <strong>host</strong> of each registered team — after the reveal time has passed.
+          The host is responsible for sharing them with teammates.
         </p>
       </section>
 
