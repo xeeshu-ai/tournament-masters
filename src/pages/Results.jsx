@@ -9,10 +9,9 @@ function teammateCount(teamSize) {
   const n = Number(teamSize);
   if (!n || n <= 1) return 0;
   if (n === 2) return 1;
-  return 3; // 3 or 4 → squad (host + 3)
+  return 3;
 }
 
-/** Build player name list for a registration (host UID + teammate UIDs as names) */
 function buildPlayerNames(reg) {
   const names = [reg.host_uid];
   const mates = [reg.teammate_uid_1, reg.teammate_uid_2, reg.teammate_uid_3].filter(Boolean);
@@ -23,10 +22,8 @@ function buildPlayerNames(reg) {
 
 function CsLwResultEntry({ tournament, teams, onSaved }) {
   const totalRounds = Number(tournament.total_rounds) || 13;
-  const objectiveRounds = Math.ceil(totalRounds / 2) + 1; // e.g. 13 → 7
+  const objectiveRounds = Math.ceil(totalRounds / 2) + 1;
 
-  // matchups: array of { teamA_idx, teamB_idx } — for single match just one pair
-  // For simplicity we handle all confirmed teams as sequential pairings (A vs B, C vs D…)
   const pairs = React.useMemo(() => {
     const p = [];
     for (let i = 0; i + 1 < teams.length; i += 2) {
@@ -35,15 +32,14 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
     return p;
   }, [teams]);
 
-  // State: for each pair → { roundsA, roundsB, winner ('a'|'b'|''), players: { [uid]: { kills, deaths } } }
-  const [matchData, setMatchData] = React.useState(() =>
-    pairs.map((pair) => ({
-      roundsA: '',
-      roundsB: '',
-      winner: '',
-      players: {},
-    }))
-  );
+  // ✅ FIX: initialise as empty array; sync whenever pairs changes (teams loads async)
+  const [matchData, setMatchData] = React.useState([]);
+
+  React.useEffect(() => {
+    setMatchData(
+      pairs.map(() => ({ roundsA: '', roundsB: '', winner: '', players: {} }))
+    );
+  }, [pairs]);
 
   const [saving, setSaving] = React.useState(false);
   const [toast, setToast] = React.useState(null);
@@ -76,7 +72,6 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
 
   async function handleSave() {
     setSaving(true);
-    // Build results payload
     const matches = pairs.map((pair, i) => {
       const md = matchData[i];
       const playersA = buildPlayerNames(pair.a).map(uid => ({
@@ -100,7 +95,10 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
 
     const { error } = await supabaseAdmin
       .from('tournaments')
-      .update({ cs_lw_results: { total_rounds: totalRounds, objective_rounds: objectiveRounds, matches }, winner_text: winnerTeam ? `Winner: ${winnerTeam}` : '' })
+      .update({
+        cs_lw_results: { total_rounds: totalRounds, objective_rounds: objectiveRounds, matches },
+        winner_text: winnerTeam ? `Winner: ${winnerTeam}` : '',
+      })
       .eq('id', tournament.id);
 
     setSaving(false);
@@ -109,15 +107,40 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
     if (onSaved) onSaved();
   }
 
+  if (teams.length === 0) {
+    return (
+      <div className="card text-xs text-slate-400">
+        No confirmed teams found for this tournament. Make sure registrations are approved/confirmed.
+      </div>
+    );
+  }
+
   if (teams.length < 2) {
-    return <p className="text-xs text-slate-400">Need at least 2 confirmed teams to enter results.</p>;
+    return (
+      <div className="card text-xs text-amber-400">
+        ⚠️ Only 1 confirmed team found. Need at least 2 teams to enter CS/LW results.
+      </div>
+    );
+  }
+
+  // Guard: matchData not yet synced (pairs loaded but effect hasn't run)
+  if (matchData.length !== pairs.length) {
+    return (
+      <div className="card flex items-center gap-3 py-6 text-xs text-slate-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" />
+        <p>Loading match data…</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      {toast && <div className={`rounded-lg px-3 py-2 text-xs ${toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{toast.msg}</div>}
+      {toast && (
+        <div className={`rounded-lg px-3 py-2 text-xs ${
+          toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
+        }`}>{toast.msg}</div>
+      )}
 
-      {/* Rounds info banner */}
       <div className="rounded-lg bg-sky-500/10 border border-sky-700 px-4 py-2 text-xs text-sky-300 flex gap-6">
         <span>Total rounds: <strong className="text-slate-100">{totalRounds}</strong></span>
         <span>Objective (rounds to win): <strong className="text-amber-300">{objectiveRounds}</strong></span>
@@ -125,19 +148,17 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
 
       {pairs.map((pair, pairIdx) => {
         const md = matchData[pairIdx];
+        if (!md) return null;
         const playersA = buildPlayerNames(pair.a);
         const playersB = buildPlayerNames(pair.b);
 
         return (
           <div key={pairIdx} className="card space-y-4">
-            {/* Match header */}
             <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
               Match {pairIdx + 1}
             </div>
 
-            {/* VS layout */}
             <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
-              {/* Team A */}
               <TeamPanel
                 team={pair.a}
                 players={playersA}
@@ -148,27 +169,29 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
                 isWinner={md.winner === 'a'}
               />
 
-              {/* VS + winner selector */}
               <div className="flex flex-col items-center gap-3 pt-8">
                 <span className="text-slate-500 font-bold text-sm">VS</span>
                 <div className="space-y-1 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Winner</p>
                   <button
                     onClick={() => setWinner(pairIdx, md.winner === 'a' ? '' : 'a')}
-                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${md.winner === 'a' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${
+                      md.winner === 'a' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    }`}
                   >
                     {pair.a.team_name.substring(0, 10)}
                   </button>
                   <button
                     onClick={() => setWinner(pairIdx, md.winner === 'b' ? '' : 'b')}
-                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${md.winner === 'b' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${
+                      md.winner === 'b' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    }`}
                   >
                     {pair.b.team_name.substring(0, 10)}
                   </button>
                 </div>
               </div>
 
-              {/* Team B */}
               <TeamPanel
                 team={pair.b}
                 players={playersB}
@@ -183,11 +206,7 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
         );
       })}
 
-      <button
-        className="btn-primary w-full"
-        disabled={saving}
-        onClick={handleSave}
-      >
+      <button className="btn-primary w-full" disabled={saving} onClick={handleSave}>
         {saving ? 'Saving…' : 'Save CS/LW Results'}
       </button>
     </div>
@@ -196,15 +215,17 @@ function CsLwResultEntry({ tournament, teams, onSaved }) {
 
 function TeamPanel({ team, players, rounds, onRoundsChange, playerStats, onStatChange, isWinner }) {
   return (
-    <div className={`rounded-xl border p-3 space-y-3 transition-colors ${isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'}`}>
-      {/* Team name + winner badge */}
+    <div className={`rounded-xl border p-3 space-y-3 transition-colors ${
+      isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'
+    }`}>
       <div className="flex items-center gap-2">
         <div className="w-5 h-5 rounded bg-slate-700 border border-slate-600 flex-shrink-0" />
         <span className="font-bold text-sm text-slate-100 truncate">{team.team_name.toUpperCase()}</span>
-        {isWinner && <span className="ml-auto text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">Winner</span>}
+        {isWinner && (
+          <span className="ml-auto text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">Winner</span>
+        )}
       </div>
 
-      {/* Rounds won input */}
       <div className="flex items-center gap-2">
         <span className="text-[11px] text-slate-400 whitespace-nowrap">Rounds:</span>
         <input
@@ -217,7 +238,6 @@ function TeamPanel({ team, players, rounds, onRoundsChange, playerStats, onStatC
         />
       </div>
 
-      {/* Player stats table */}
       <div>
         <div className="grid grid-cols-3 gap-1 text-[10px] text-slate-500 uppercase tracking-wider mb-1 px-1">
           <span>Player</span>
@@ -329,7 +349,11 @@ function EndTournamentSection({ tournament, onEnded }) {
 
   return (
     <div className="card space-y-3 border border-red-900/40 bg-red-500/5">
-      {toast && <div className={`rounded-lg px-3 py-2 text-xs ${toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{toast.msg}</div>}
+      {toast && (
+        <div className={`rounded-lg px-3 py-2 text-xs ${
+          toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
+        }`}>{toast.msg}</div>
+      )}
 
       <div className="flex items-center justify-between">
         <div>
@@ -341,7 +365,10 @@ function EndTournamentSection({ tournament, onEnded }) {
           </p>
         </div>
         {!isEnded && !confirm && (
-          <button onClick={() => setConfirm(true)} className="rounded-lg bg-red-700 hover:bg-red-600 text-white text-xs font-semibold px-4 py-2 transition-colors flex-shrink-0">
+          <button
+            onClick={() => setConfirm(true)}
+            className="rounded-lg bg-red-700 hover:bg-red-600 text-white text-xs font-semibold px-4 py-2 transition-colors flex-shrink-0"
+          >
             End Tournament
           </button>
         )}
@@ -357,7 +384,10 @@ function EndTournamentSection({ tournament, onEnded }) {
             <button onClick={handleEnd} disabled={ending} className="btn-primary bg-red-600 hover:bg-red-500 text-xs">
               {ending ? 'Ending…' : 'Yes, End Tournament'}
             </button>
-            <button onClick={() => setConfirm(false)} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+            <button
+              onClick={() => setConfirm(false)}
+              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors"
+            >
               Cancel
             </button>
           </div>
@@ -386,7 +416,7 @@ export function ResultsPage() {
   async function loadTournaments() {
     const { data, error } = await supabaseAdmin
       .from('tournaments')
-      .select('id, title, type, mode, total_rounds, status')
+      .select('id, title, type, mode, total_rounds, status, team_size')
       .eq('is_archived', false)
       .order('start_time', { ascending: false });
     if (error) console.error(error);
