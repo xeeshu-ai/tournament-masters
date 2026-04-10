@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import './index.css';
-import { supabaseAdmin } from './supabaseClient';
+import { supabaseAuth } from './supabaseClient';
 import { AdminLayout } from './layout/AdminLayout';
 import { Login } from './pages/Login';
 import { DashboardPage } from './pages/Dashboard';
@@ -26,7 +26,8 @@ function AdminShell() {
   React.useEffect(() => {
     let ignore = false;
     async function load() {
-      const { data } = await supabaseAdmin.auth.getUser();
+      // Use supabaseAuth (anon key) for session check
+      const { data } = await supabaseAuth.auth.getUser();
       if (!ignore) {
         if (!data?.user) {
           navigate('/login');
@@ -37,7 +38,7 @@ function AdminShell() {
       }
     }
     load();
-    const { data: sub } = supabaseAdmin.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabaseAuth.auth.onAuthStateChange((_event, session) => {
       if (!session?.user) {
         setUser(null);
         navigate('/login');

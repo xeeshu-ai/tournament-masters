@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabaseAdmin } from '../supabaseClient';
+import { supabaseAuth } from '../supabaseClient';
 
 export function Login() {
   const navigate = useNavigate();
@@ -15,7 +15,7 @@ export function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus('loading');
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    const { data, error } = await supabaseAuth.auth.signInWithPassword({
       email: form.email,
       password: form.password,
     });
