@@ -1,10 +1,11 @@
 import React from 'react'
-import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { supabaseAdmin } from '../supabaseClient'
 import { GAMES } from '../constants'
 
 const navItems = [
   { to: '', label: 'Overview' },
+  { to: 'players', label: 'Players' },
   { to: 'tournaments', label: 'Tournaments' },
   { to: 'registrations', label: 'Registrations' },
   { to: 'brackets', label: 'Bracket Manager' },
@@ -56,13 +57,6 @@ export function AdminLayout({ user, children }) {
           {item.label}
         </NavLink>
       ))}
-      {/* Players lives globally — link back out of game scope */}
-      <button
-        onClick={() => { onNavigate(); navigate('/players'); }}
-        className="block w-full rounded-lg px-3 py-2 text-left text-slate-300 hover:bg-slate-900/70 hover:text-sky-200"
-      >
-        Players
-      </button>
     </nav>
   )
 
@@ -104,7 +98,6 @@ export function AdminLayout({ user, children }) {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
-      {/* Mobile drawer backdrop */}
       {drawerOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/60 md:hidden"
@@ -112,7 +105,6 @@ export function AdminLayout({ user, children }) {
         />
       )}
 
-      {/* Mobile drawer */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 w-64 border-r border-slate-800 bg-slate-950 px-4 py-4 transition-transform duration-200 md:hidden ${
           drawerOpen ? 'translate-x-0' : '-translate-x-full'
@@ -141,7 +133,6 @@ export function AdminLayout({ user, children }) {
       </aside>
 
       <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
         <aside className="hidden w-60 flex-shrink-0 border-r border-slate-800 bg-slate-950/90 px-4 py-4 md:block">
           <div className="pb-2">
             <BrandBlock />
@@ -151,9 +142,7 @@ export function AdminLayout({ user, children }) {
         </aside>
 
         <main className="flex flex-1 flex-col">
-          {/* Header */}
           <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 py-3">
-            {/* Mobile: hamburger + title */}
             <div className="flex items-center gap-3 md:hidden">
               <button
                 onClick={() => setDrawerOpen(true)}
@@ -171,7 +160,6 @@ export function AdminLayout({ user, children }) {
               )}
             </div>
 
-            {/* Desktop: breadcrumb */}
             <div className="hidden items-center gap-2 text-sm md:flex">
               <button
                 onClick={handleSwitchGame}
@@ -187,7 +175,6 @@ export function AdminLayout({ user, children }) {
               )}
             </div>
 
-            {/* Right: user + logout */}
             <div className="flex items-center gap-3 text-xs text-slate-400">
               {user ? (
                 <>
@@ -204,7 +191,6 @@ export function AdminLayout({ user, children }) {
             </div>
           </header>
 
-          {/* Page content */}
           <div className="flex-1 px-4 py-4">
             {children}
             <Outlet />
