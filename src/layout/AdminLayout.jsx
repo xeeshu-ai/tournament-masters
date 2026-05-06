@@ -5,7 +5,6 @@ import { GAMES } from '../constants'
 
 const navItems = [
   { to: '', label: 'Overview' },
-  { to: 'players', label: 'Players' },
   { to: 'tournaments', label: 'Tournaments' },
   { to: 'registrations', label: 'Registrations' },
   { to: 'brackets', label: 'Bracket Manager' },
@@ -57,6 +56,13 @@ export function AdminLayout({ user, children }) {
           {item.label}
         </NavLink>
       ))}
+      {/* Players lives globally — link back out of game scope */}
+      <button
+        onClick={() => { onNavigate(); navigate('/players'); }}
+        className="block w-full rounded-lg px-3 py-2 text-left text-slate-300 hover:bg-slate-900/70 hover:text-sky-200"
+      >
+        Players
+      </button>
     </nav>
   )
 
