@@ -19,6 +19,50 @@ import { NameChangesPage } from './pages/Names';
 import { BanManagerPage } from './pages/Bans';
 import { BroadcastPage } from './pages/Broadcast';
 
+// Minimal shell for the global /players route — no game sidebar, just a clean header
+function GlobalPlayersShell({ user }) {
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    await supabaseAuth.auth.signOut();
+    navigate('/login');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
+      <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-6 py-3">
+        <div className="flex items-center gap-3">
+          {/* Back to games */}
+          <button
+            onClick={() => navigate('/games')}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            Games
+          </button>
+          <span className="text-slate-700">/</span>
+          <span className="text-sm font-semibold text-slate-200">Players</span>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <span className="hidden sm:inline">
+            Signed in as <span className="text-slate-100">{user?.email}</span>
+          </span>
+          <button
+            onClick={handleLogout}
+            className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-300 transition hover:border-slate-600 hover:bg-slate-700 hover:text-slate-100"
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+      <main className="flex-1 px-6 py-6">
+        <PlayersPage />
+      </main>
+    </div>
+  );
+}
+
 function AdminShell() {
   const [user, setUser] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -62,8 +106,11 @@ function AdminShell() {
 
   return (
     <Routes>
-      {/* Game selector — shown after login, before picking a game */}
+      {/* Game selector */}
       <Route path="games" element={<GameSelectPage user={user} />} />
+
+      {/* Global Players page — outside any game scope */}
+      <Route path="players" element={<GlobalPlayersShell user={user} />} />
 
       {/* Game-scoped admin — all pages live under /:gameId */}
       <Route path=":gameId" element={<AdminLayout user={user} />}>
