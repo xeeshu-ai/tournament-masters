@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import './index.css';
 import { supabaseAuth } from './supabaseClient';
 import { AdminLayout } from './layout/AdminLayout';
+import { GameSelectPage } from './pages/GameSelect';
 import { Login } from './pages/Login';
 import { DashboardPage } from './pages/Dashboard';
 import { PlayersPage } from './pages/Players';
@@ -26,7 +27,6 @@ function AdminShell() {
   React.useEffect(() => {
     let ignore = false;
     async function load() {
-      // Use supabaseAuth (anon key) for session check
       const { data } = await supabaseAuth.auth.getUser();
       if (!ignore) {
         if (!data?.user) {
@@ -61,8 +61,12 @@ function AdminShell() {
   }
 
   return (
-    <AdminLayout user={user}>
-      <Routes>
+    <Routes>
+      {/* Game selector — shown after login, before picking a game */}
+      <Route path="games" element={<GameSelectPage user={user} />} />
+
+      {/* Game-scoped admin — all pages live under /:gameId */}
+      <Route path=":gameId" element={<AdminLayout user={user} />}>
         <Route index element={<DashboardPage navigate={navigate} />} />
         <Route path="players" element={<PlayersPage />} />
         <Route path="tournaments" element={<TournamentsPage />} />
@@ -75,9 +79,18 @@ function AdminShell() {
         <Route path="bans" element={<BanManagerPage />} />
         <Route path="broadcast" element={<BroadcastPage />} />
         <Route path="complaints" element={<ComplaintsPage />} />
-      </Routes>
-    </AdminLayout>
+      </Route>
+
+      {/* Default: redirect to game selector */}
+      <Route path="*" element={<RedirectToGames />} />
+    </Routes>
   );
+}
+
+function RedirectToGames() {
+  const navigate = useNavigate();
+  React.useEffect(() => { navigate('/games', { replace: true }); }, [navigate]);
+  return null;
 }
 
 function AppRouter() {

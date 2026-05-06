@@ -24,6 +24,21 @@ export const BR_SLOT_OPTIONS = {
   squad: [5, 8, 12],
 };
 
+// Games registry — add new games here, they'll auto-appear on the game picker
+export const GAMES = [
+  {
+    id: 'free-fire',
+    label: 'Free Fire',
+    shortLabel: 'FF',
+    description: 'Battle Royale · Clash Squad · Lone Wolf',
+    color: 'orange',          // used for accent styling
+    active: true,
+  },
+  // Future games — set active: true when ready
+  // { id: 'bgmi', label: 'BGMI', shortLabel: 'BG', description: 'Battle Royale · TDM', color: 'blue', active: false },
+  // { id: 'valorant', label: 'Valorant', shortLabel: 'VL', description: 'Competitive · Unrated', color: 'red', active: false },
+];
+
 /**
  * Custom Free Fire BR scoring formula:
  *   Points = ((kills + 1) / position) * 100

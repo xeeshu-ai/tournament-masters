@@ -1,6 +1,7 @@
 import React from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { supabaseAdmin } from '../supabaseClient'
+import { GAMES } from '../constants'
 
 const navItems = [
   { to: '', label: 'Overview' },
@@ -17,13 +18,26 @@ const navItems = [
   { to: 'complaints', label: 'Complaints' },
 ]
 
+const GAME_ACCENT = {
+  orange: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+  blue: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+  red: 'bg-red-500/15 text-red-300 border-red-500/30',
+}
+
 export function AdminLayout({ user, children }) {
   const navigate = useNavigate()
+  const { gameId } = useParams()
   const [drawerOpen, setDrawerOpen] = React.useState(false)
+
+  const game = GAMES.find((g) => g.id === gameId)
 
   const handleLogout = async () => {
     await supabaseAdmin.auth.signOut()
-    navigate('login')
+    navigate('/login')
+  }
+
+  const handleSwitchGame = () => {
+    navigate('/games')
   }
 
   const NavLinks = ({ onNavigate }) => (
@@ -31,7 +45,7 @@ export function AdminLayout({ user, children }) {
       {navItems.map((item) => (
         <NavLink
           key={item.to}
-          to={item.to}
+          to={item.to === '' ? `/${gameId}` : `/${gameId}/${item.to}`}
           end={item.to === ''}
           onClick={onNavigate}
           className={({ isActive }) =>
@@ -58,6 +72,30 @@ export function AdminLayout({ user, children }) {
     </div>
   )
 
+  const GameBadge = () =>
+    game ? (
+      <div className="mt-4 mb-2">
+        <div className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${
+          GAME_ACCENT[game.color] || GAME_ACCENT.blue
+        }`}>
+          <div>
+            <p className="font-semibold">{game.label}</p>
+            <p className="opacity-70 text-[10px] mt-0.5">{game.description}</p>
+          </div>
+          <button
+            onClick={handleSwitchGame}
+            title="Switch game"
+            className="ml-2 rounded p-1 opacity-60 transition hover:opacity-100"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 6h16M4 12h16M4 18h7" />
+              <path d="M15 15l3 3 3-3" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    ) : null
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
       {/* Mobile drawer backdrop */}
@@ -74,7 +112,7 @@ export function AdminLayout({ user, children }) {
           drawerOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between pb-4">
+        <div className="flex items-center justify-between pb-2">
           <BrandBlock />
           <button
             onClick={() => setDrawerOpen(false)}
@@ -86,6 +124,7 @@ export function AdminLayout({ user, children }) {
             </svg>
           </button>
         </div>
+        <GameBadge />
         <NavLinks onNavigate={() => setDrawerOpen(false)} />
         <div className="mt-6 border-t border-slate-800 pt-4 text-xs text-slate-400">
           {user && <p className="mb-2 truncate">{user.email}</p>}
@@ -98,9 +137,10 @@ export function AdminLayout({ user, children }) {
       <div className="flex min-h-screen">
         {/* Desktop sidebar */}
         <aside className="hidden w-60 flex-shrink-0 border-r border-slate-800 bg-slate-950/90 px-4 py-4 md:block">
-          <div className="pb-4">
+          <div className="pb-2">
             <BrandBlock />
           </div>
+          <GameBadge />
           <NavLinks onNavigate={() => {}} />
         </aside>
 
@@ -118,16 +158,27 @@ export function AdminLayout({ user, children }) {
                   <path d="M3 12h18M3 6h18M3 18h18"/>
                 </svg>
               </button>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Tournvia master
-              </p>
+              {game && (
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {game.label}
+                </span>
+              )}
             </div>
 
-            {/* Desktop: brand */}
-            <div className="hidden items-center gap-2 md:flex">
-              <Link to="" className="flex items-center gap-2">
-                <BrandBlock />
-              </Link>
+            {/* Desktop: breadcrumb */}
+            <div className="hidden items-center gap-2 text-sm md:flex">
+              <button
+                onClick={handleSwitchGame}
+                className="text-slate-400 hover:text-slate-200 transition"
+              >
+                Games
+              </button>
+              {game && (
+                <>
+                  <span className="text-slate-700">/</span>
+                  <span className="font-medium text-slate-200">{game.label}</span>
+                </>
+              )}
             </div>
 
             {/* Right: user + logout */}
@@ -142,7 +193,7 @@ export function AdminLayout({ user, children }) {
                   </button>
                 </>
               ) : (
-                <span>Checking admin session</span>
+                <span>Checking admin session…</span>
               )}
             </div>
           </header>
