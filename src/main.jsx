@@ -8,6 +8,7 @@ import { GameSelectPage } from './pages/GameSelect';
 import { Login } from './pages/Login';
 import { DashboardPage } from './pages/Dashboard';
 import { PlayersPage } from './pages/Players';
+import { GlobalPlayersPage } from './pages/GlobalPlayers';
 import { TournamentsPage } from './pages/Tournaments';
 import { RegistrationsPage } from './pages/Registrations';
 import { PaymentsPage } from './pages/Payments';
@@ -19,7 +20,6 @@ import { NameChangesPage } from './pages/Names';
 import { BanManagerPage } from './pages/Bans';
 import { BroadcastPage } from './pages/Broadcast';
 
-// Minimal shell for the global /players route — no game sidebar, just a clean header
 function GlobalPlayersShell({ user }) {
   const navigate = useNavigate();
   const handleLogout = async () => {
@@ -31,7 +31,6 @@ function GlobalPlayersShell({ user }) {
     <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
       <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-6 py-3">
         <div className="flex items-center gap-3">
-          {/* Back to games */}
           <button
             onClick={() => navigate('/games')}
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
@@ -57,7 +56,7 @@ function GlobalPlayersShell({ user }) {
         </div>
       </header>
       <main className="flex-1 px-6 py-6">
-        <PlayersPage />
+        <GlobalPlayersPage />
       </main>
     </div>
   );
@@ -106,13 +105,12 @@ function AdminShell() {
 
   return (
     <Routes>
-      {/* Game selector */}
       <Route path="games" element={<GameSelectPage user={user} />} />
 
-      {/* Global Players page — outside any game scope */}
+      {/* Global Tournvia accounts page */}
       <Route path="players" element={<GlobalPlayersShell user={user} />} />
 
-      {/* Game-scoped admin — all pages live under /:gameId */}
+      {/* Game-scoped admin */}
       <Route path=":gameId" element={<AdminLayout user={user} />}>
         <Route index element={<DashboardPage navigate={navigate} />} />
         <Route path="players" element={<PlayersPage />} />
@@ -128,7 +126,6 @@ function AdminShell() {
         <Route path="complaints" element={<ComplaintsPage />} />
       </Route>
 
-      {/* Default: redirect to game selector */}
       <Route path="*" element={<RedirectToGames />} />
     </Routes>
   );
