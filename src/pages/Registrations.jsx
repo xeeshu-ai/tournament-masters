@@ -1,4 +1,5 @@
 import React from 'react';
+import { useParams } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 
@@ -30,7 +31,6 @@ function StatusPill({ status }) {
 function TeamCard({ reg, idx, onRemove }) {
   const [open, setOpen] = React.useState(false);
 
-  // Use the correct column names: teammate_uid_1, teammate_uid_2, teammate_uid_3
   const teammates = [
     reg.teammate_uid_1 ? { uid: reg.teammate_uid_1 } : null,
     reg.teammate_uid_2 ? { uid: reg.teammate_uid_2 } : null,
@@ -41,7 +41,6 @@ function TeamCard({ reg, idx, onRemove }) {
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/60 text-xs overflow-hidden">
-      {/* ─ Accordion header ─ */}
       <button
         type="button"
         className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-800/40 transition-colors"
@@ -73,11 +72,8 @@ function TeamCard({ reg, idx, onRemove }) {
         </div>
       </button>
 
-      {/* ─ Expanded details ─ */}
       {open && (
         <div className="border-t border-slate-800 px-3 py-2.5 space-y-2.5">
-
-          {/* Host */}
           <div className="rounded-lg bg-slate-950/70 px-3 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-1">Host (Member 1)</p>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
@@ -89,7 +85,6 @@ function TeamCard({ reg, idx, onRemove }) {
             </div>
           </div>
 
-          {/* Teammates */}
           {teammates.length > 0 ? (
             <div className="rounded-lg bg-slate-950/70 px-3 py-2 space-y-1.5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -106,7 +101,6 @@ function TeamCard({ reg, idx, onRemove }) {
             <p className="text-[11px] text-slate-600 italic">Solo registration — no teammates.</p>
           )}
 
-          {/* Payment */}
           {(reg.razorpay_order_id || reg.payment_id) && (
             <div className="rounded-lg bg-slate-950/70 px-3 py-2 space-y-0.5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-1">Payment</p>
@@ -201,6 +195,9 @@ function RemoveDialog({ reg, onCancel, onConfirm }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function RegistrationsPage() {
+  // ← scope all queries to the currently selected game
+  const { gameId } = useParams();
+
   const [tournaments,      setTournaments]      = React.useState([]);
   const [regsByTournament, setRegsByTournament] = React.useState({});
   const [loading,          setLoading]          = React.useState(true);
@@ -214,13 +211,14 @@ export function RegistrationsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const load = async () => {
+  const load = React.useCallback(async () => {
     setLoading(true);
 
-    // 1. Tournaments
+    // 1. Tournaments — scoped to this game
     const { data: tData, error: tErr } = await supabaseAdmin
       .from('tournaments')
       .select('id, title, mode, format_label, start_time, registration_status, is_archived, filled_slots, max_slots')
+      .eq('game_id', gameId)                         // ← game filter
       .order('start_time', { ascending: false });
 
     if (tErr) {
@@ -230,12 +228,22 @@ export function RegistrationsPage() {
       return;
     }
 
-    // 2. Registrations — correct column names: teammate_uid_1/2/3
+    // 2. Registrations for these tournaments only
+    const tournamentIds = (tData || []).map((t) => t.id);
+
+    if (tournamentIds.length === 0) {
+      setTournaments([]);
+      setRegsByTournament({});
+      setLoading(false);
+      return;
+    }
+
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
       .select(
         'id, tournament_id, host_uid, team_name, status, created_at, teammate_uid_1, teammate_uid_2, teammate_uid_3, razorpay_order_id, payment_id'
       )
+      .in('tournament_id', tournamentIds)            // ← scoped to this game's tournaments
       .order('created_at', { ascending: true });
 
     if (rErr) {
@@ -247,20 +255,24 @@ export function RegistrationsPage() {
       return;
     }
 
-    // 3. Resolve host names via ff_uid → full_name
+    // 3. Resolve host display names via game_profiles (game-scoped UIDs)
     const hostUids = [...new Set((rData || []).map((r) => r.host_uid).filter(Boolean))];
     let nameMap = {};
 
     if (hostUids.length > 0) {
-      const { data: pData, error: pErr } = await supabaseAdmin
-        .from('players')
-        .select('ff_uid, full_name')
-        .in('ff_uid', hostUids);
+      // game_profiles stores per-game UIDs; join via player_id → players.full_name
+      const { data: gpData, error: gpErr } = await supabaseAdmin
+        .from('game_profiles')
+        .select('game_uid, players(full_name)')
+        .eq('game_id', gameId)
+        .in('game_uid', hostUids);
 
-      if (pErr) {
-        console.error('players name fetch error:', pErr);
+      if (gpErr) {
+        console.error('game_profiles name fetch error:', gpErr);
       } else {
-        nameMap = Object.fromEntries((pData || []).map((p) => [p.ff_uid, p.full_name]));
+        nameMap = Object.fromEntries(
+          (gpData || []).map((gp) => [gp.game_uid, gp.players?.full_name || null])
+        );
       }
     }
 
@@ -275,11 +287,10 @@ export function RegistrationsPage() {
     setTournaments(tData || []);
     setRegsByTournament(grouped);
     setLoading(false);
-  };
+  }, [gameId]);
 
-  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => { load(); }, [load]);
 
-  // Remove registration — trigger handles filled_slots decrement automatically
   const handleRemoveConfirmed = async () => {
     const reg = removeTarget;
     if (!reg) return;
@@ -301,7 +312,6 @@ export function RegistrationsPage() {
     load();
   };
 
-  // Filter + search
   const visibleTournaments = tournaments
     .filter((t) => (filter === 'all' ? true : !t.is_archived))
     .filter((t) => {
@@ -325,7 +335,6 @@ export function RegistrationsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-50">Registrations</h1>
@@ -347,7 +356,6 @@ export function RegistrationsPage() {
         </div>
       </header>
 
-      {/* Controls */}
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
@@ -373,7 +381,6 @@ export function RegistrationsPage() {
         </button>
       </div>
 
-      {/* List */}
       {loading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => <div key={i} className="card h-14 animate-pulse bg-slate-900/60" />)}
