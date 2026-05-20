@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import {
   BR_SLOT_OPTIONS,
@@ -192,7 +192,7 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-      <div className="card max-h-[90vh] w-full max-w-2xl space-y-3 overflow-y-auto text-xs text-slate-200">
+      <div className="card maxh-[90vh] w-full max-w-2xl space-y-3 overflow-y-auto text-xs text-slate-200">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-50">
@@ -567,6 +567,7 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
 export function TournamentsPage() {
   const { gameId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tournaments, setTournaments] = React.useState([]);
   const [archived, setArchived] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -601,6 +602,18 @@ export function TournamentsPage() {
   React.useEffect(() => {
     load();
   }, [gameId]);
+
+  React.useEffect(() => {
+    const editId = searchParams.get('editId');
+    if (!editId || !tournaments.length) return;
+    const t = tournaments.find((tt) => String(tt.id) === String(editId));
+    if (!t) return;
+    setEditing(t);
+    setFormOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('editId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, tournaments, setSearchParams]);
 
   const labelForType = (id) => TOURNAMENT_TYPES.find((x) => x.id === id)?.label || id;
 

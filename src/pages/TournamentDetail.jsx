@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import { TOURNAMENT_TYPES } from '../constants';
 import { Toast } from '../components/Toast';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 export function TournamentDetailPage() {
   const { gameId, tournamentId } = useParams();
@@ -12,6 +13,8 @@ export function TournamentDetailPage() {
   const [registrations, setRegistrations] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [toast, setToast] = React.useState(null);
+  const [confirmArchive, setConfirmArchive] = React.useState({ open: false });
+  const [confirmDelete, setConfirmDelete] = React.useState({ open: false });
 
   const notify = (message, type = 'success') => {
     setToast({ message, type });
@@ -79,6 +82,39 @@ export function TournamentDetailPage() {
 
   const openBrackets = () => {
     navigate(`/${gameId}/brackets?tournamentId=${tournamentId}`);
+  };
+
+  const openEdit = () => {
+    navigate(`/${gameId}/tournaments?editId=${tournamentId}`);
+  };
+
+  const handleArchiveConfirmed = async () => {
+    if (!tournament) return;
+    const { error } = await supabaseAdmin
+      .from('tournaments')
+      .update({ is_archived: true })
+      .eq('id', tournament.id);
+    if (error) {
+      console.error(error);
+      notify('Failed to archive tournament.', 'error');
+      return;
+    }
+    notify('Tournament archived.');
+    setConfirmArchive({ open: false });
+    navigate(`/${gameId}/tournaments`);
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!tournament) return;
+    const { error } = await supabaseAdmin.from('tournaments').delete().eq('id', tournament.id);
+    if (error) {
+      console.error(error);
+      notify('Failed to delete tournament.', 'error');
+      return;
+    }
+    notify('Tournament deleted permanently.', 'success');
+    setConfirmDelete({ open: false });
+    navigate(`/${gameId}/tournaments`);
   };
 
   const typeLabel = tournament
@@ -169,7 +205,7 @@ export function TournamentDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-col items-stretch gap-2 text-xs min-w-[180px]">
+        <div className="flex flex-col items-stretch gap-2 text-xs min-w-[220px]">
           <button type="button" className="btn-primary" onClick={openResults}>
             Open results entry
           </button>
@@ -178,6 +214,25 @@ export function TournamentDetailPage() {
               Open bracket manager
             </button>
           )}
+          <div className="flex gap-2 pt-1">
+            <button type="button" className="btn-secondary flex-1" onClick={openEdit}>
+              Edit
+            </button>
+            <button
+              type="button"
+              className="btn-secondary flex-1"
+              onClick={() => setConfirmArchive({ open: true, id: tournament?.id })}
+            >
+              Archive
+            </button>
+          </div>
+          <button
+            type="button"
+            className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
+            onClick={() => setConfirmDelete({ open: true, id: tournament?.id, title: tournament?.title })}
+          >
+            Delete permanently
+          </button>
         </div>
       </header>
 
@@ -347,6 +402,23 @@ export function TournamentDetailPage() {
           )}
         </div>
       </section>
+
+      <ConfirmDialog
+        open={confirmArchive.open}
+        title="Archive tournament?"
+        description="Archived tournaments are hidden from lists but kept in the database."
+        confirmLabel="Archive"
+        onCancel={() => setConfirmArchive({ open: false })}
+        onConfirm={handleArchiveConfirmed}
+      />
+      <ConfirmDialog
+        open={confirmDelete.open}
+        title={`Delete "${confirmDelete.title}"?`}
+        description="This will permanently delete the tournament and all its registrations. This action cannot be undone."
+        confirmLabel="Delete permanently"
+        onCancel={() => setConfirmDelete({ open: false })}
+        onConfirm={handleDeleteConfirmed}
+      />
     </div>
   );
 }
