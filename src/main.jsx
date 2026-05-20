@@ -9,7 +9,8 @@ import { Login } from './pages/Login';
 import { DashboardPage } from './pages/Dashboard';
 import { PlayersPage } from './pages/Players';
 import { GlobalPlayersPage } from './pages/GlobalPlayers';
-import { TournamentsPage } from './pages/Tournaments';
+import { SingleTournamentsPage } from './pages/SingleTournaments';
+import { LongTournamentsPage } from './pages/LongTournaments';
 import { TournamentDetailPage } from './pages/TournamentDetail';
 import { RegistrationsPage } from './pages/Registrations';
 import { PaymentsPage } from './pages/Payments';
@@ -27,38 +28,23 @@ function GlobalPlayersShell({ user }) {
     await supabaseAuth.auth.signOut();
     navigate('/login');
   };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
       <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-6 py-3">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/games')}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
+          <button onClick={() => navigate('/games')} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" /></svg>
             Games
           </button>
           <span className="text-slate-700">/</span>
           <span className="text-sm font-semibold text-slate-200">Players</span>
         </div>
         <div className="flex items-center gap-3 text-xs text-slate-400">
-          <span className="hidden sm:inline">
-            Signed in as <span className="text-slate-100">{user?.email}</span>
-          </span>
-          <button
-            onClick={handleLogout}
-            className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-300 transition hover:border-slate-600 hover:bg-slate-700 hover:text-slate-100"
-          >
-            Logout
-          </button>
+          <span className="hidden sm:inline">Signed in as <span className="text-slate-100">{user?.email}</span></span>
+          <button onClick={handleLogout} className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-300 transition hover:border-slate-600 hover:bg-slate-700 hover:text-slate-100">Logout</button>
         </div>
       </header>
-      <main className="flex-1 px-6 py-6">
-        <GlobalPlayersPage />
-      </main>
+      <main className="flex-1 px-6 py-6"><GlobalPlayersPage /></main>
     </div>
   );
 }
@@ -73,47 +59,35 @@ function AdminShell() {
     async function load() {
       const { data } = await supabaseAuth.auth.getUser();
       if (!ignore) {
-        if (!data?.user) {
-          navigate('/login');
-        } else {
-          setUser(data.user);
-        }
+        if (!data?.user) { navigate('/login'); }
+        else { setUser(data.user); }
         setLoading(false);
       }
     }
     load();
     const { data: sub } = supabaseAuth.auth.onAuthStateChange((_event, session) => {
-      if (!session?.user) {
-        setUser(null);
-        navigate('/login');
-      } else {
-        setUser(session.user);
-      }
+      if (!session?.user) { setUser(null); navigate('/login'); }
+      else { setUser(session.user); }
     });
-    return () => {
-      ignore = true;
-      sub.subscription.unsubscribe();
-    };
+    return () => { ignore = true; sub.subscription.unsubscribe(); };
   }, [navigate]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-xs text-slate-400">
-        Checking admin session…
-      </div>
-    );
+    return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-xs text-slate-400">Checking admin session…</div>;
   }
 
   return (
     <Routes>
       <Route path="games" element={<GameSelectPage user={user} />} />
-
       <Route path="players" element={<GlobalPlayersShell user={user} />} />
-
       <Route path=":gameId" element={<AdminLayout user={user} />}>
         <Route index element={<DashboardPage navigate={navigate} />} />
         <Route path="players" element={<PlayersPage />} />
-        <Route path="tournaments" element={<TournamentsPage />} />
+        {/* Two dedicated tournament pages */}
+        <Route path="single-tournaments" element={<SingleTournamentsPage />} />
+        <Route path="long-tournaments" element={<LongTournamentsPage />} />
+        {/* Keep old /tournaments route pointing to single for backwards compat */}
+        <Route path="tournaments" element={<SingleTournamentsPage />} />
         <Route path="tournaments/:tournamentId" element={<TournamentDetailPage />} />
         <Route path="registrations" element={<RegistrationsPage />} />
         <Route path="brackets" element={<BracketManagerPage />} />
@@ -125,7 +99,6 @@ function AdminShell() {
         <Route path="broadcast" element={<BroadcastPage />} />
         <Route path="complaints" element={<ComplaintsPage />} />
       </Route>
-
       <Route path="*" element={<RedirectToGames />} />
     </Routes>
   );
@@ -133,9 +106,7 @@ function AdminShell() {
 
 function RedirectToGames() {
   const navigate = useNavigate();
-  React.useEffect(() => {
-    navigate('/games', { replace: true });
-  }, [navigate]);
+  React.useEffect(() => { navigate('/games', { replace: true }); }, [navigate]);
   return null;
 }
 
@@ -151,7 +122,5 @@ function AppRouter() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <AppRouter />
-  </React.StrictMode>,
+  <React.StrictMode><AppRouter /></React.StrictMode>,
 );
