@@ -189,15 +189,28 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   const isCS = form.mode === 'cs';
   const isLW = form.mode === 'lw';
   const isTDM = form.mode === 'tdm';
+  const isLong = form.type === 'long';
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
       <div className="card maxh-[90vh] w-full max-w-2xl space-y-3 overflow-y-auto text-xs text-slate-200">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-50">
-              {form.id ? 'Edit tournament' : 'Create tournament'}
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-slate-50">
+                {form.id ? 'Edit tournament' : 'Create tournament'}
+              </h2>
+              <span
+                className={
+                  'rounded-full px-2 py-0.5 text-[10px] font-medium ' +
+                  (isLong
+                    ? 'bg-violet-900/60 text-violet-300 border border-violet-700/50'
+                    : 'bg-sky-900/60 text-sky-300 border border-sky-700/50')
+                }
+              >
+                {isLong ? 'Long tournament' : 'Single match'}
+              </span>
+            </div>
             <p className="text-11px text-slate-500">Configure mode, slots, and timings.</p>
           </div>
           <button type="button" className="btn-secondary" onClick={onClose}>
@@ -214,19 +227,8 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
             <input id="title" name="title" className="input" value={form.title} onChange={handleChange} required />
           </div>
 
-          {/* Type */}
-          <div>
-            <label className="label" htmlFor="type">
-              Type
-            </label>
-            <select id="type" name="type" className="input" value={form.type} onChange={handleChange}>
-              {TOURNAMENT_TYPES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Type — hidden, locked to what section opened the form */}
+          <input type="hidden" name="type" value={form.type} />
 
           {/* Mode — game-aware */}
           <div>
@@ -564,6 +566,178 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   );
 }
 
+// ── Single-match tournament row ──────────────────────────────────────────────
+function SingleTournamentRow({ t, gameId, onEdit, onArchive, onDelete, navigate }) {
+  const formatBadge = () => {
+    if (t.mode === 'br') {
+      const size = Number(t.team_size) === 1 ? 'Solo' : Number(t.team_size) === 2 ? 'Duo' : 'Squad';
+      return t.players_per_match ? `${size} · ${t.players_per_match}p` : size;
+    }
+    if (t.mode === 'cs') return t.total_rounds ? `CS · ${t.total_rounds}R` : 'CS';
+    if (t.mode === 'lw') {
+      const size = Number(t.team_size) === 1 ? '1v1' : '2v2';
+      return t.total_rounds ? `LW ${size} · ${t.total_rounds}R` : `LW ${size}`;
+    }
+    if (t.mode === 'tdm') return t.total_rounds ? `TDM · ${t.total_rounds}R` : 'TDM';
+    return t.format_label || t.mode;
+  };
+
+  return (
+    <tr>
+      <td>{t.title}</td>
+      <td>{t.mode?.toUpperCase()}</td>
+      <td>
+        <span className="badge">{formatBadge()}</span>
+      </td>
+      <td>{t.entry_fee ? `₹${Number(t.entry_fee).toLocaleString('en-IN')}` : 'Free'}</td>
+      <td>
+        {t.filled_slots || 0}/{t.max_slots}
+      </td>
+      <td>
+        <span
+          className={
+            'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')
+          }
+        >
+          {t.registration_status}
+        </span>
+      </td>
+      <td>{t.start_time ? new Date(t.start_time).toLocaleString('en-IN') : '—'}</td>
+      <td className="space-x-1.5 text-right whitespace-nowrap">
+        <button
+          type="button"
+          className="btn-secondary text-[11px]"
+          onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}
+        >
+          Open
+        </button>
+        <button
+          type="button"
+          className="btn-secondary text-[11px]"
+          onClick={() => onEdit(t)}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className="btn-secondary text-[11px]"
+          onClick={() => onArchive(t)}
+        >
+          Archive
+        </button>
+        <button
+          type="button"
+          className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
+          onClick={() => onDelete(t)}
+        >
+          Delete
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+// ── Long tournament card ──────────────────────────────────────────────────────
+function LongTournamentCard({ t, gameId, onEdit, onArchive, onDelete, navigate }) {
+  const hasBracket = t.mode === 'cs' || t.mode === 'lw';
+
+  const modeBadge = () => {
+    if (t.mode === 'br') {
+      const size = Number(t.team_size) === 1 ? 'Solo' : Number(t.team_size) === 2 ? 'Duo' : 'Squad';
+      return `BR · ${size}${t.players_per_match ? ` · ${t.players_per_match}p` : ''}`;
+    }
+    if (t.mode === 'cs') return t.total_rounds ? `CS · ${t.total_rounds}R` : 'CS';
+    if (t.mode === 'lw') {
+      const size = Number(t.team_size) === 1 ? '1v1' : '2v2';
+      return t.total_rounds ? `LW ${size} · ${t.total_rounds}R` : `LW ${size}`;
+    }
+    return t.format_label || t.mode?.toUpperCase();
+  };
+
+  return (
+    <div className="rounded-xl border border-violet-800/40 bg-slate-900/60 p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-slate-50 leading-tight">{t.title}</h3>
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            <span className="badge bg-violet-900/60 text-violet-300 border border-violet-700/40">
+              {modeBadge()}
+            </span>
+            <span
+              className={
+                'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')
+              }
+            >
+              {t.registration_status}
+            </span>
+            <span className="badge bg-slate-800 text-slate-300">
+              {t.filled_slots || 0}/{t.max_slots} slots
+            </span>
+            {t.entry_fee > 0 && (
+              <span className="badge bg-emerald-900/40 text-emerald-400 border border-emerald-800/40">
+                ₹{Number(t.entry_fee).toLocaleString('en-IN')}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="text-[11px] text-slate-500 text-right shrink-0">
+          {t.start_time ? new Date(t.start_time).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+        </div>
+      </div>
+
+      {/* Action row */}
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          className="btn-primary text-[11px] flex-1 min-w-[100px]"
+          onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}
+        >
+          Open tournament
+        </button>
+        {hasBracket && (
+          <button
+            type="button"
+            className="btn-secondary text-[11px] flex-1 min-w-[120px] border-violet-700/50 text-violet-300 hover:bg-violet-900/30"
+            onClick={() => navigate(`/${gameId}/brackets?tournamentId=${t.id}`)}
+          >
+            Bracket manager
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn-secondary text-[11px]"
+          onClick={() => navigate(`/${gameId}/results?tournamentId=${t.id}`)}
+        >
+          Results
+        </button>
+        <button
+          type="button"
+          className="btn-secondary text-[11px]"
+          onClick={() => onEdit(t)}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className="btn-secondary text-[11px]"
+          onClick={() => onArchive(t)}
+        >
+          Archive
+        </button>
+        <button
+          type="button"
+          className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
+          onClick={() => onDelete(t)}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export function TournamentsPage() {
   const { gameId } = useParams();
   const navigate = useNavigate();
@@ -603,6 +777,7 @@ export function TournamentsPage() {
     load();
   }, [gameId]);
 
+  // Deep-link edit via ?editId=
   React.useEffect(() => {
     const editId = searchParams.get('editId');
     if (!editId || !tournaments.length) return;
@@ -615,21 +790,18 @@ export function TournamentsPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, tournaments, setSearchParams]);
 
-  const labelForType = (id) => TOURNAMENT_TYPES.find((x) => x.id === id)?.label || id;
-
-  const formatBadge = (t) => {
-    if (t.mode === 'br') {
-      const size = Number(t.team_size) === 1 ? 'Solo' : Number(t.team_size) === 2 ? 'Duo' : 'Squad';
-      return t.players_per_match ? `${size} · ${t.players_per_match}p` : size;
-    }
-    if (t.mode === 'cs') return t.total_rounds ? `CS · ${t.total_rounds}R` : 'CS';
-    if (t.mode === 'lw') {
-      const size = Number(t.team_size) === 1 ? '1v1' : '2v2';
-      return t.total_rounds ? `LW ${size} · ${t.total_rounds}R` : `LW ${size}`;
-    }
-    if (t.mode === 'tdm') return t.total_rounds ? `TDM · ${t.total_rounds}R` : 'TDM';
-    return t.format_label || t.mode;
+  const openCreate = (type) => {
+    setEditing({ ...emptyForm, type });
+    setFormOpen(true);
   };
+
+  const openEdit = (t) => {
+    setEditing(t);
+    setFormOpen(true);
+  };
+
+  const openArchive = (t) => setConfirmArchive({ open: true, id: t.id });
+  const openDelete = (t) => setConfirmDelete({ open: true, id: t.id, title: t.title });
 
   const handleArchiveConfirmed = async () => {
     const { id } = confirmArchive;
@@ -658,148 +830,152 @@ export function TournamentsPage() {
   const singleActive = tournaments.filter((t) => t.type === 'single');
   const longActive = tournaments.filter((t) => t.type === 'long');
 
-  const renderTable = (rows) => (
-    <table className="table">
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th>Mode</th>
-          <th>Format</th>
-          <th>Entry</th>
-          <th>Slots</th>
-          <th>Reg</th>
-          <th>Start</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((t) => (
-          <tr key={t.id}>
-            <td>{t.title}</td>
-            <td>{t.mode?.toUpperCase()}</td>
-            <td>
-              <span className="badge">{formatBadge(t)}</span>
-            </td>
-            <td>{t.entry_fee}</td>
-            <td>
-              {t.filled_slots || 0}/{t.max_slots}
-            </td>
-            <td>
-              <span
-                className={
-                  'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')
-                }
-              >
-                {t.registration_status}
-              </span>
-            </td>
-            <td>{t.start_time ? new Date(t.start_time).toLocaleString() : '—'}</td>
-            <td className="space-x-2 text-right">
-              <button
-                type="button"
-                className="btn-secondary text-[11px]"
-                onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                className="btn-secondary text-[11px]"
-                onClick={() => {
-                  setEditing(t);
-                  setFormOpen(true);
-                }}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className="btn-secondary text-[11px]"
-                onClick={() => setConfirmArchive({ open: true, id: t.id })}
-              >
-                Archive
-              </button>
-              <button
-                type="button"
-                className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
-                onClick={() => setConfirmDelete({ open: true, id: t.id, title: t.title })}
-              >
-                Delete
-              </button>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-
   return (
-    <div className="space-y-4">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-50">Tournaments</h1>
-          <p className="text-xs text-slate-400">
-            Create, manage, and drill into single-match and long tournaments for this game.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="btn-primary text-xs"
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
-        >
-          New tournament
-        </button>
+    <div className="space-y-6">
+      {/* Page header — no global "New" button anymore */}
+      <header>
+        <h1 className="text-xl font-semibold text-slate-50">Tournaments</h1>
+        <p className="text-xs text-slate-400 mt-0.5">
+          Manage single-match and long tournaments separately for this game.
+        </p>
       </header>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-100">Single-match tournaments</h2>
+      {/* ── Single-match section ─────────────────────────────────────────── */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {/* Blue accent bar */}
+            <span className="inline-block w-1 h-5 rounded-full bg-sky-500" />
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">Single-match tournaments</h2>
+              <p className="text-[11px] text-slate-500">
+                One match per tournament — BR, CS, LW, or TDM format.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-primary text-xs shrink-0"
+            onClick={() => openCreate('single')}
+          >
+            + New single match
+          </button>
+        </div>
+
         <div className="card overflow-x-auto">
           {loading ? (
-            <p className="text-xs text-slate-400">Loading tournaments…</p>
+            <p className="text-xs text-slate-400">Loading…</p>
           ) : singleActive.length === 0 ? (
-            <p className="text-xs text-slate-400">
-              No active single-match tournaments. Create one to get started.
-            </p>
+            <div className="py-8 text-center">
+              <p className="text-xs text-slate-500">No single-match tournaments yet.</p>
+              <button
+                type="button"
+                className="mt-3 btn-secondary text-xs"
+                onClick={() => openCreate('single')}
+              >
+                Create your first one
+              </button>
+            </div>
           ) : (
-            renderTable(singleActive)
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Mode</th>
+                  <th>Format</th>
+                  <th>Entry</th>
+                  <th>Slots</th>
+                  <th>Reg</th>
+                  <th>Start</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {singleActive.map((t) => (
+                  <SingleTournamentRow
+                    key={t.id}
+                    t={t}
+                    gameId={gameId}
+                    onEdit={openEdit}
+                    onArchive={openArchive}
+                    onDelete={openDelete}
+                    navigate={navigate}
+                  />
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-100">Long tournaments</h2>
-        <div className="card overflow-x-auto">
+      {/* ── Long tournaments section ─────────────────────────────────────── */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {/* Violet accent bar */}
+            <span className="inline-block w-1 h-5 rounded-full bg-violet-500" />
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">Long tournaments</h2>
+              <p className="text-[11px] text-slate-500">
+                Multi-match, multi-team events — bracket manager and fixture generation included.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="text-xs rounded-lg px-3 py-1.5 bg-violet-900/40 text-violet-300 border border-violet-700/50 hover:bg-violet-800/40 transition-colors shrink-0"
+            onClick={() => openCreate('long')}
+          >
+            + New long tournament
+          </button>
+        </div>
+
+        <div className="space-y-2">
           {loading ? (
-            <p className="text-xs text-slate-400">Loading tournaments…</p>
+            <div className="card">
+              <p className="text-xs text-slate-400">Loading…</p>
+            </div>
           ) : longActive.length === 0 ? (
-            <p className="text-xs text-slate-400">
-              No active long tournaments. Create one to get started.
-            </p>
+            <div className="card py-8 text-center border-violet-800/30">
+              <p className="text-xs text-slate-500">No long tournaments yet.</p>
+              <button
+                type="button"
+                className="mt-3 text-xs rounded-lg px-3 py-1.5 bg-violet-900/40 text-violet-300 border border-violet-700/50 hover:bg-violet-800/40 transition-colors"
+                onClick={() => openCreate('long')}
+              >
+                Create your first one
+              </button>
+            </div>
           ) : (
-            renderTable(longActive)
+            longActive.map((t) => (
+              <LongTournamentCard
+                key={t.id}
+                t={t}
+                gameId={gameId}
+                onEdit={openEdit}
+                onArchive={openArchive}
+                onDelete={openDelete}
+                navigate={navigate}
+              />
+            ))
           )}
         </div>
       </section>
 
-      <section className="space-y-2">
-        <details className="space-y-2">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-200">
-            Archived tournaments ({archived.length})
-          </summary>
-          <div className="card overflow-x-auto">
-            {archived.length === 0 ? (
-              <p className="text-xs text-slate-400">No archived tournaments yet.</p>
-            ) : (
+      {/* ── Archived ─────────────────────────────────────────────────────── */}
+      {archived.length > 0 && (
+        <section className="space-y-2">
+          <details>
+            <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-300 transition-colors select-none">
+              Archived tournaments ({archived.length})
+            </summary>
+            <div className="mt-2 card overflow-x-auto">
               <table className="table">
                 <thead>
                   <tr>
                     <th>Title</th>
                     <th>Type</th>
                     <th>Mode</th>
-                    <th>Format</th>
                     <th>Start</th>
                     <th></th>
                   </tr>
@@ -808,15 +984,25 @@ export function TournamentsPage() {
                   {archived.map((t) => (
                     <tr key={t.id}>
                       <td>{t.title}</td>
-                      <td>{labelForType(t.type)}</td>
+                      <td>
+                        <span
+                          className={
+                            'rounded-full px-2 py-0.5 text-[10px] font-medium ' +
+                            (t.type === 'long'
+                              ? 'bg-violet-900/40 text-violet-400'
+                              : 'bg-sky-900/40 text-sky-400')
+                          }
+                        >
+                          {t.type === 'long' ? 'Long' : 'Single'}
+                        </span>
+                      </td>
                       <td>{t.mode?.toUpperCase()}</td>
-                      <td>{formatBadge(t)}</td>
-                      <td>{t.start_time ? new Date(t.start_time).toLocaleString() : '—'}</td>
+                      <td>{t.start_time ? new Date(t.start_time).toLocaleString('en-IN') : '—'}</td>
                       <td className="text-right">
                         <button
                           type="button"
                           className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
-                          onClick={() => setConfirmDelete({ open: true, id: t.id, title: t.title })}
+                          onClick={() => openDelete(t)}
                         >
                           Delete
                         </button>
@@ -825,11 +1011,12 @@ export function TournamentsPage() {
                   ))}
                 </tbody>
               </table>
-            )}
-          </div>
-        </details>
-      </section>
+            </div>
+          </details>
+        </section>
+      )}
 
+      {/* Form modal */}
       <TournamentForm
         open={formOpen}
         initial={editing}
@@ -837,7 +1024,9 @@ export function TournamentsPage() {
         onSaved={load}
         gameId={gameId}
       />
+
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
+
       <ConfirmDialog
         open={confirmArchive.open}
         title="Archive tournament?"
