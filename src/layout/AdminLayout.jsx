@@ -5,23 +5,16 @@ import { GAMES } from '../constants'
 
 // Nav sections — items with section: true render a divider + label
 const navItems = [
-  { to: '',            label: 'Overview',        end: true },
-  { to: 'players',     label: 'Players' },
+  { to: '',        label: 'Overview', end: true },
+  { to: 'players', label: 'Players' },
 
   { section: 'Tournaments' },
-  { to: 'single-tournaments', label: 'Single Matches',    accent: 'sky' },
-  { to: 'long-tournaments',   label: 'Long Tournaments',  accent: 'violet' },
-
-  { section: 'Management' },
-  { to: 'registrations', label: 'Registrations' },
-  { to: 'brackets',      label: 'Bracket Manager' },
-  { to: 'results',       label: 'Results Entry' },
-  { to: 'payments',      label: 'Payments' },
-  { to: 'rooms',         label: 'Room Codes' },
+  { to: 'single-tournaments', label: 'Single Matches',   accent: 'sky' },
+  { to: 'long-tournaments',   label: 'Long Tournaments', accent: 'violet' },
 
   { section: 'Players' },
-  { to: 'names',    label: 'Name Changes' },
-  { to: 'bans',     label: 'Ban Manager' },
+  { to: 'names', label: 'Name Changes' },
+  { to: 'bans',  label: 'Ban Manager' },
 
   { section: 'Other' },
   { to: 'broadcast',  label: 'Broadcast' },
@@ -35,7 +28,7 @@ const GAME_ACCENT = {
 }
 
 const ACCENT_STYLES = {
-  sky:    { active: 'bg-sky-500/10 text-sky-300',    dot: 'bg-sky-500',    ring: 'ring-sky-500/60' },
+  sky:    { active: 'bg-sky-500/10 text-sky-300',       dot: 'bg-sky-500',    ring: 'ring-sky-500/60' },
   violet: { active: 'bg-violet-500/10 text-violet-300', dot: 'bg-violet-500', ring: 'ring-violet-500/60' },
 }
 
@@ -46,13 +39,12 @@ export function AdminLayout({ user, children }) {
 
   const game = GAMES.find((g) => g.id === gameId)
 
-  const handleLogout      = async () => { await supabaseAdmin.auth.signOut(); navigate('/login') }
-  const handleSwitchGame  = ()       => { navigate('/games') }
+  const handleLogout     = async () => { await supabaseAdmin.auth.signOut(); navigate('/login') }
+  const handleSwitchGame = ()       => { navigate('/games') }
 
   const NavLinks = ({ onNavigate }) => (
     <nav className="space-y-0.5 text-sm">
       {navItems.map((item, i) => {
-        // Section divider
         if (item.section) {
           return (
             <div key={`sec-${i}`} className="pt-4 pb-1 first:pt-1">
@@ -60,11 +52,11 @@ export function AdminLayout({ user, children }) {
                 {item.section}
               </p>
             </div>
-          );
+          )
         }
 
-        const accent   = item.accent ? ACCENT_STYLES[item.accent] : null;
-        const fullPath = item.to === '' ? `/${gameId}` : `/${gameId}/${item.to}`;
+        const accent   = item.accent ? ACCENT_STYLES[item.accent] : null
+        const fullPath = item.to === '' ? `/${gameId}` : `/${gameId}/${item.to}`
 
         return (
           <NavLink
@@ -73,11 +65,11 @@ export function AdminLayout({ user, children }) {
             end={item.end || false}
             onClick={onNavigate}
             className={({ isActive }) => {
-              const base = 'flex items-center gap-2 rounded-lg px-3 py-2 transition';
+              const base = 'flex items-center gap-2 rounded-lg px-3 py-2 transition'
               if (isActive) {
-                return `${base} ${accent ? accent.active : 'bg-sky-500/10 text-sky-300'}`;
+                return `${base} ${accent ? accent.active : 'bg-sky-500/10 text-sky-300'}`
               }
-              return `${base} text-slate-300 hover:bg-slate-900/70 hover:text-sky-200`;
+              return `${base} text-slate-300 hover:bg-slate-900/70 hover:text-sky-200`
             }}
           >
             {accent && (
@@ -85,10 +77,10 @@ export function AdminLayout({ user, children }) {
             )}
             {item.label}
           </NavLink>
-        );
+        )
       })}
     </nav>
-  );
+  )
 
   const BrandBlock = () => (
     <div className="flex items-center gap-2">
@@ -100,7 +92,7 @@ export function AdminLayout({ user, children }) {
         <p className="text-sm font-semibold">Tournvia</p>
       </div>
     </div>
-  );
+  )
 
   const GameBadge = () =>
     game ? (
@@ -120,7 +112,7 @@ export function AdminLayout({ user, children }) {
           </button>
         </div>
       </div>
-    ) : null;
+    ) : null
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
@@ -217,5 +209,5 @@ export function AdminLayout({ user, children }) {
         </main>
       </div>
     </div>
-  );
+  )
 }
