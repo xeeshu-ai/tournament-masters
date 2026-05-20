@@ -176,295 +176,201 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   const isLong = form.type === 'long';
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-      <div className="card maxh-[90vh] w-full max-w-2xl space-y-3 overflow-y-auto text-xs text-slate-200">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-slate-50">
-                {form.id ? 'Edit tournament' : 'Create tournament'}
-              </h2>
-              <span className={'rounded-full px-2 py-0.5 text-[10px] font-medium ' + (isLong ? 'bg-violet-900/60 text-violet-300 border border-violet-700/50' : 'bg-sky-900/60 text-sky-300 border border-sky-700/50')}>
-                {isLong ? 'Long tournament' : 'Single match'}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500">Configure mode, slots, and timings.</p>
-          </div>
-          <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
+    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/60 px-4 py-6 overflow-y-auto">
+      <div className="card w-full max-w-2xl space-y-3 text-xs text-slate-300 my-auto">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-100">
+            {form.id ? 'Edit Tournament' : 'New Tournament'}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid gap-3 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className="label" htmlFor="title">Title</label>
-            <input id="title" name="title" className="input" value={form.title} onChange={handleChange} required />
-          </div>
-
-          <input type="hidden" name="type" value={form.type} />
-
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Title */}
           <div>
-            <label className="label" htmlFor="mode">Mode</label>
-            <select id="mode" name="mode" className="input" value={form.mode} onChange={handleChange}>
-              {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
+            <label className="label">Title</label>
+            <input name="title" className="input" value={form.title} onChange={handleChange} required />
           </div>
 
-          {isBR && (
-            <>
-              <div>
-                <label className="label" htmlFor="team_size">Team size</label>
-                <select id="team_size" name="team_size" className="input" value={form.team_size} onChange={handleChange}>
-                  {BR_TEAM_SIZES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="players_per_match">Players per match</label>
-                <select id="players_per_match" name="players_per_match" className="input" value={form.players_per_match} onChange={handleChange}>
-                  <option value="">Select</option>
-                  {BR_PLAYERS_PER_MATCH.map((n) => <option key={n} value={n}>{n} players</option>)}
-                </select>
-              </div>
-            </>
-          )}
-
-          {isCS && (
+          {/* Type + Mode */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label" htmlFor="total_rounds">Total rounds</label>
-              <select id="total_rounds" name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
-                <option value="">Select</option>
-                {CS_ROUNDS.map((r) => <option key={r} value={r}>{r} rounds</option>)}
+              <label className="label">Type</label>
+              <select name="type" className="input" value={form.type} onChange={handleChange}>
+                <option value="single">Single match</option>
+                <option value="long">Long tournament</option>
               </select>
             </div>
-          )}
-
-          {isLW && (
-            <>
-              <div>
-                <label className="label" htmlFor="team_size">Team size</label>
-                <select id="team_size" name="team_size" className="input" value={form.team_size} onChange={handleChange}>
-                  <option value={1}>Solo (1v1)</option>
-                  <option value={2}>Duo (2v2)</option>
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="total_rounds">Total rounds</label>
-                <select id="total_rounds" name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
-                  <option value="">Select</option>
-                  {LW_ROUNDS.map((r) => <option key={r} value={r}>{r} rounds</option>)}
-                </select>
-              </div>
-            </>
-          )}
-
-          {isTDM && (
-            <>
-              <div>
-                <label className="label">Team size</label>
-                <input className="input" value="4v4 (fixed)" disabled />
-              </div>
-              <div>
-                <label className="label" htmlFor="total_rounds">Total rounds</label>
-                <select id="total_rounds" name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
-                  <option value="">Select</option>
-                  {[3, 5, 7].map((r) => <option key={r} value={r}>{r} rounds</option>)}
-                </select>
-              </div>
-            </>
-          )}
-
-          <div>
-            <label className="label" htmlFor="format_label">Format label</label>
-            <input id="format_label" name="format_label" className="input" placeholder={isBR ? 'Auto-filled from team size' : isCS || isTDM ? '4v4' : '1v1 / 2v2'} value={form.format_label} onChange={handleChange} required />
-          </div>
-
-          {isBR && (
             <div>
-              <label className="label" htmlFor="map">Map</label>
-              <select id="map" name="map" className="input" value={form.map} onChange={handleChange}>
-                <option value="">Select map</option>
-                {MAPS.map((m) => <option key={m} value={m}>{m}</option>)}
+              <label className="label">Mode</label>
+              <select name="mode" className="input" value={form.mode} onChange={handleChange}>
+                {MODES.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
               </select>
             </div>
+          </div>
+
+          {/* BR-specific */}
+          {isBR && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Team size</label>
+                  <select name="team_size" className="input" value={form.team_size} onChange={handleChange}>
+                    {BR_TEAM_SIZES.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Players per match</label>
+                  <select name="players_per_match" className="input" value={form.players_per_match} onChange={handleChange}>
+                    <option value="">Select…</option>
+                    {BR_PLAYERS_PER_MATCH.map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label">Map</label>
+                <select name="map" className="input" value={form.map} onChange={handleChange}>
+                  <option value="">Select map…</option>
+                  {MAPS.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
 
+          {/* CS/LW specific */}
           {(isCS || isLW) && (
-            <div className="flex items-center gap-4 pt-5">
-              <label className="inline-flex items-center gap-2 text-[11px] text-slate-200">
-                <input type="checkbox" name="skills_on" checked={form.skills_on} onChange={handleChange} className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500" />
-                Skills on
-              </label>
-              <label className="inline-flex items-center gap-2 text-[11px] text-slate-200">
-                <input type="checkbox" name="limited_ammo" checked={form.limited_ammo} onChange={handleChange} className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500" />
-                Limited ammo
-              </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Total rounds</label>
+                <select name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
+                  <option value="">Select…</option>
+                  {(isCS ? CS_ROUNDS : LW_ROUNDS).map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-2 pt-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" name="skills_on" checked={form.skills_on} onChange={handleChange} className="rounded" />
+                  Skills on
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" name="limited_ammo" checked={form.limited_ammo} onChange={handleChange} className="rounded" />
+                  Limited ammo
+                </label>
+              </div>
             </div>
           )}
 
+          {/* TDM specific */}
+          {isTDM && (
+            <div>
+              <label className="label">Total rounds</label>
+              <select name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
+                <option value="">Select…</option>
+                {TDM_ROUNDS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* LW team size */}
+          {isLW && (
+            <div>
+              <label className="label">LW format</label>
+              <select name="team_size" className="input" value={form.team_size} onChange={handleChange}>
+                <option value={1}>1v1</option>
+                <option value={2}>2v2</option>
+              </select>
+            </div>
+          )}
+
+          {/* Slots + Fee */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Max slots{isBR && form.players_per_match && form.team_size ? ` (auto: ${calcMaxSlots(form.players_per_match, form.team_size)})` : ''}</label>
+              <input
+                name="max_slots"
+                type="number"
+                className="input"
+                value={form.max_slots}
+                onChange={handleChange}
+                readOnly={isBR}
+              />
+            </div>
+            <div>
+              <label className="label">Entry fee (₹)</label>
+              <input name="entry_fee" type="number" className="input" value={form.entry_fee} onChange={handleChange} min={0} />
+            </div>
+          </div>
+
+          {/* Times */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Entry closing time</label>
+              <input name="entry_closing_time" type="datetime-local" className="input" value={form.entry_closing_time} onChange={handleChange} />
+            </div>
+            <div>
+              <label className="label">Match start time</label>
+              <input name="match_start_time" type="datetime-local" className="input" value={form.match_start_time} onChange={handleChange} />
+            </div>
+          </div>
+
+          {/* Registration status */}
           <div>
-            <label className="label" htmlFor="entry_fee">Entry fee</label>
-            <input id="entry_fee" name="entry_fee" type="number" className="input" value={form.entry_fee} onChange={handleChange} />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="max_slots">Max slots{isBR ? ' (auto-calculated)' : ' (locked to 2)'}</label>
-            <input id="max_slots" name="max_slots" type="number" className="input" value={form.max_slots} onChange={handleChange} readOnly={isCS || isLW || isTDM} />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="label" htmlFor="prize_text">Prize distribution (free text)</label>
-            <textarea id="prize_text" name="prize_text" rows={3} className="input resize-none" value={form.prize_text} onChange={handleChange} />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="label" htmlFor="points_table">Points table (free text)</label>
-            <textarea id="points_table" name="points_table" rows={3} className="input resize-none" value={form.points_table} onChange={handleChange} />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="entry_closing_time">Entry closing time</label>
-            <input id="entry_closing_time" name="entry_closing_time" type="datetime-local" className="input" value={form.entry_closing_time} onChange={handleChange} required />
-          </div>
-          <div>
-            <label className="label" htmlFor="match_start_time">Match start time</label>
-            <input id="match_start_time" name="match_start_time" type="datetime-local" className="input" value={form.match_start_time} onChange={handleChange} required />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="label" htmlFor="youtube_live_url">YouTube live URL</label>
-            <input id="youtube_live_url" name="youtube_live_url" className="input" value={form.youtube_live_url} onChange={handleChange} />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="registration_status">Registration status</label>
-            <select id="registration_status" name="registration_status" className="input" value={form.registration_status} onChange={handleChange}>
+            <label className="label">Registration status</label>
+            <select name="registration_status" className="input" value={form.registration_status} onChange={handleChange}>
               <option value="open">Open</option>
               <option value="closed">Closed</option>
+              <option value="full">Full</option>
             </select>
           </div>
 
-          {error && <div className="md:col-span-2 text-[11px] text-red-400">{error}</div>}
+          {/* YouTube */}
+          <div>
+            <label className="label">YouTube live URL (optional)</label>
+            <input name="youtube_live_url" type="url" className="input" value={form.youtube_live_url} onChange={handleChange} placeholder="https://youtu.be/…" />
+          </div>
 
-          <div className="md:col-span-2 flex justify-end gap-2 pt-1">
-            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save tournament'}</button>
+          {/* Prize text */}
+          <div>
+            <label className="label">Prize / distribution text</label>
+            <textarea name="prize_text" rows={3} className="input resize-none" value={form.prize_text} onChange={handleChange} />
+          </div>
+
+          {/* Points table */}
+          <div>
+            <label className="label">Points table (optional)</label>
+            <textarea name="points_table" rows={3} className="input resize-none" value={form.points_table} onChange={handleChange} />
+          </div>
+
+          {error && <p className="rounded bg-red-500/10 px-3 py-2 text-red-400">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Create tournament'}</button>
           </div>
         </form>
       </div>
     </div>
-  );
-}
-
-// ── Single-match row ──────────────────────────────────────────────────────────
-export function SingleTournamentRow({ t, gameId, onEdit, onArchive, onDelete, navigate }) {
-  const formatBadge = () => {
-    if (t.mode === 'br') {
-      const size = Number(t.team_size) === 1 ? 'Solo' : Number(t.team_size) === 2 ? 'Duo' : 'Squad';
-      return t.players_per_match ? `${size} · ${t.players_per_match}p` : size;
-    }
-    if (t.mode === 'cs') return t.total_rounds ? `CS · ${t.total_rounds}R` : 'CS';
-    if (t.mode === 'lw') {
-      const size = Number(t.team_size) === 1 ? '1v1' : '2v2';
-      return t.total_rounds ? `LW ${size} · ${t.total_rounds}R` : `LW ${size}`;
-    }
-    if (t.mode === 'tdm') return t.total_rounds ? `TDM · ${t.total_rounds}R` : 'TDM';
-    return t.format_label || t.mode;
-  };
-  return (
-    <tr>
-      <td>{t.title}</td>
-      <td>{t.mode?.toUpperCase()}</td>
-      <td><span className="badge">{formatBadge()}</span></td>
-      <td>{t.entry_fee ? `₹${Number(t.entry_fee).toLocaleString('en-IN')}` : 'Free'}</td>
-      <td>{t.filled_slots || 0}/{t.max_slots}</td>
-      <td>
-        <span className={'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')}>
-          {t.registration_status}
-        </span>
-      </td>
-      <td>{t.start_time ? new Date(t.start_time).toLocaleString('en-IN') : '—'}</td>
-      <td className="space-x-1.5 text-right whitespace-nowrap">
-        <button type="button" className="btn-secondary text-[11px]" onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}>Open</button>
-        <button type="button" className="btn-secondary text-[11px]" onClick={() => onEdit(t)}>Edit</button>
-        <button type="button" className="btn-secondary text-[11px]" onClick={() => onArchive(t)}>Archive</button>
-        <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => onDelete(t)}>Delete</button>
-      </td>
-    </tr>
-  );
-}
-
-// ── Long tournament card ──────────────────────────────────────────────────────
-export function LongTournamentCard({ t, gameId, onEdit, onArchive, onDelete, navigate }) {
-  const hasBracket = t.mode === 'cs' || t.mode === 'lw';
-  const modeBadge = () => {
-    if (t.mode === 'br') {
-      const size = Number(t.team_size) === 1 ? 'Solo' : Number(t.team_size) === 2 ? 'Duo' : 'Squad';
-      return `BR · ${size}${t.players_per_match ? ` · ${t.players_per_match}p` : ''}`;
-    }
-    if (t.mode === 'cs') return t.total_rounds ? `CS · ${t.total_rounds}R` : 'CS';
-    if (t.mode === 'lw') {
-      const size = Number(t.team_size) === 1 ? '1v1' : '2v2';
-      return t.total_rounds ? `LW ${size} · ${t.total_rounds}R` : `LW ${size}`;
-    }
-    return t.format_label || t.mode?.toUpperCase();
-  };
-  return (
-    <div className="rounded-xl border border-violet-800/40 bg-slate-900/60 p-4 space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold text-slate-50 leading-tight">{t.title}</h3>
-          <div className="flex flex-wrap gap-1.5 text-[11px]">
-            <span className="badge bg-violet-900/60 text-violet-300 border border-violet-700/40">{modeBadge()}</span>
-            <span className={'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')}>{t.registration_status}</span>
-            <span className="badge bg-slate-800 text-slate-300">{t.filled_slots || 0}/{t.max_slots} slots</span>
-            {t.entry_fee > 0 && <span className="badge bg-emerald-900/40 text-emerald-400 border border-emerald-800/40">₹{Number(t.entry_fee).toLocaleString('en-IN')}</span>}
-          </div>
-        </div>
-        <div className="text-[11px] text-slate-500 text-right shrink-0">
-          {t.start_time ? new Date(t.start_time).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        <button type="button" className="btn-primary text-[11px] flex-1 min-w-[100px]" onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}>Open tournament</button>
-        {hasBracket && (
-          <button type="button" className="btn-secondary text-[11px] flex-1 min-w-[120px] border-violet-700/50 text-violet-300 hover:bg-violet-900/30" onClick={() => navigate(`/${gameId}/brackets?tournamentId=${t.id}`)}>Bracket manager</button>
-        )}
-        <button type="button" className="btn-secondary text-[11px]" onClick={() => navigate(`/${gameId}/results?tournamentId=${t.id}`)}>Results</button>
-        <button type="button" className="btn-secondary text-[11px]" onClick={() => onEdit(t)}>Edit</button>
-        <button type="button" className="btn-secondary text-[11px]" onClick={() => onArchive(t)}>Archive</button>
-        <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => onDelete(t)}>Delete</button>
-      </div>
-    </div>
-  );
-}
-
-// ── Archived section (shared) ─────────────────────────────────────────────────
-export function ArchivedSection({ archived, onDelete }) {
-  if (!archived.length) return null;
-  return (
-    <section className="space-y-2">
-      <details>
-        <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-slate-300 transition-colors select-none">
-          Archived ({archived.length})
-        </summary>
-        <div className="mt-2 card overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr><th>Title</th><th>Mode</th><th>Start</th><th></th></tr>
-            </thead>
-            <tbody>
-              {archived.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.title}</td>
-                  <td>{t.mode?.toUpperCase()}</td>
-                  <td>{t.start_time ? new Date(t.start_time).toLocaleString('en-IN') : '—'}</td>
-                  <td className="text-right">
-                    <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => onDelete(t)}>Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
-    </section>
   );
 }

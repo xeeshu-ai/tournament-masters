@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import { calculateBrPoints } from '../constants';
 import { Toast } from '../components/Toast';
@@ -488,6 +488,11 @@ function EndTournamentSection({ tournament, onEnded }) {
 export function ResultsPage() {
   const { gameId } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // If opened from TournamentDetail, we know the source tournament id
+  const sourceTournamentId = searchParams.get('tournamentId');
+  const fromTournament = Boolean(sourceTournamentId);
 
   const [tournaments, setTournaments] = React.useState([]);
   const [selected, setSelected] = React.useState(null);
@@ -681,31 +686,56 @@ export function ResultsPage() {
   const isSingleBR = selected && selected.type === 'single' && selected.mode === 'br';
   const isCSorLW = selected && selected.mode !== 'br';
 
+  const handleBackToTournament = () => {
+    navigate(`/${gameId}/tournaments/${sourceTournamentId}?tab=results`);
+  };
+
   return (
     <div className="space-y-4">
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
       <header className="space-y-1">
+        {fromTournament && (
+          <button
+            type="button"
+            onClick={handleBackToTournament}
+            className="text-xs text-sky-300 hover:text-sky-200 flex items-center gap-1 mb-1"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            Back to tournament
+          </button>
+        )}
         <h1 className="text-xl font-semibold text-slate-50">Results Entry</h1>
         <p className="text-xs text-slate-400">Enter match results and end the tournament for players.</p>
       </header>
 
-      <div className="card space-y-3 text-xs">
-        <label className="label">Tournament</label>
-        <select
-          className="input"
-          value={selected?.id || ''}
-          onChange={(e) => handleSelectTournament(e.target.value)}
-        >
-          <option value="">Select tournament…</option>
-          {tournaments.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.title} · {t.type} · {t.mode?.toUpperCase()}
-              {t.status === 'ended' ? ' [ENDED]' : ''}
-            </option>
-          ))}
-        </select>
-      </div>
+      {!fromTournament && (
+        <div className="card space-y-3 text-xs">
+          <label className="label">Tournament</label>
+          <select
+            className="input"
+            value={selected?.id || ''}
+            onChange={(e) => handleSelectTournament(e.target.value)}
+          >
+            <option value="">Select tournament…</option>
+            {tournaments.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title} · {t.type} · {t.mode?.toUpperCase()}
+                {t.status === 'ended' ? ' [ENDED]' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {fromTournament && selected && (
+        <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-xs text-slate-300">
+          Tournament: <span className="font-semibold text-slate-100">{selected.title}</span>
+          <span className="ml-2 text-slate-500">· {selected.mode?.toUpperCase()} · {selected.type}</span>
+        </div>
+      )}
 
       {selected && isCSorLW && (
         <section className="space-y-4">
