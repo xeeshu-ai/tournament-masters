@@ -11,7 +11,8 @@ import { PlayersPage } from './pages/Players';
 import { GlobalPlayersPage } from './pages/GlobalPlayers';
 import { SingleTournamentsPage } from './pages/SingleTournaments';
 import { LongTournamentsPage } from './pages/LongTournaments';
-import { TournamentDetailPage } from './pages/TournamentDetail';
+import { SingleTournamentDetailPage } from './pages/SingleTournamentDetail';
+import { LongTournamentDetailPage } from './pages/LongTournamentDetail';
 import { RegistrationsPage } from './pages/Registrations';
 import { PaymentsPage } from './pages/Payments';
 import { ComplaintsPage } from './pages/Complaints';
@@ -83,12 +84,19 @@ function AdminShell() {
       <Route path=":gameId" element={<AdminLayout user={user} />}>
         <Route index element={<DashboardPage navigate={navigate} />} />
         <Route path="players" element={<PlayersPage />} />
-        {/* Two dedicated tournament pages */}
+
+        {/* ── Single-match tournaments ── */}
         <Route path="single-tournaments" element={<SingleTournamentsPage />} />
+        <Route path="single-tournaments/:tournamentId" element={<SingleTournamentDetailPage />} />
+
+        {/* ── Long tournaments ── */}
         <Route path="long-tournaments" element={<LongTournamentsPage />} />
-        {/* Keep old /tournaments route pointing to single for backwards compat */}
+        <Route path="long-tournaments/:tournamentId" element={<LongTournamentDetailPage />} />
+
+        {/* Legacy /tournaments redirect kept for backwards compat */}
         <Route path="tournaments" element={<SingleTournamentsPage />} />
-        <Route path="tournaments/:tournamentId" element={<TournamentDetailPage />} />
+        <Route path="tournaments/:tournamentId" element={<SingleTournamentDetailPage />} />
+
         <Route path="registrations" element={<RegistrationsPage />} />
         <Route path="brackets" element={<BracketManagerPage />} />
         <Route path="results" element={<ResultsPage />} />

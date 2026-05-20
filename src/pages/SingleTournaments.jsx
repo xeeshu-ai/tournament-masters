@@ -40,7 +40,6 @@ export function SingleTournamentsPage() {
 
   React.useEffect(() => { load(); }, [gameId]);
 
-  // Deep-link edit via ?editId=
   React.useEffect(() => {
     const editId = searchParams.get('editId');
     if (!editId || !tournaments.length) return;
@@ -76,7 +75,6 @@ export function SingleTournamentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
       <header className="flex items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -90,7 +88,6 @@ export function SingleTournamentsPage() {
         </button>
       </header>
 
-      {/* Tournaments table */}
       <div className="card overflow-x-auto">
         {loading ? (
           <p className="text-xs text-slate-400">Loading…</p>
@@ -103,14 +100,7 @@ export function SingleTournamentsPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>Title</th>
-                <th>Mode</th>
-                <th>Format</th>
-                <th>Entry</th>
-                <th>Slots</th>
-                <th>Reg</th>
-                <th>Start</th>
-                <th></th>
+                <th>Title</th><th>Mode</th><th>Format</th><th>Entry</th><th>Slots</th><th>Reg</th><th>Start</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -123,6 +113,7 @@ export function SingleTournamentsPage() {
                   onArchive={openArchive}
                   onDelete={openDelete}
                   navigate={navigate}
+                  detailPath={`/${gameId}/single-tournaments/${t.id}`}
                 />
               ))}
             </tbody>

@@ -40,7 +40,6 @@ export function LongTournamentsPage() {
 
   React.useEffect(() => { load(); }, [gameId]);
 
-  // Deep-link edit via ?editId=
   React.useEffect(() => {
     const editId = searchParams.get('editId');
     if (!editId || !tournaments.length) return;
@@ -76,7 +75,6 @@ export function LongTournamentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
       <header className="flex items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -94,20 +92,13 @@ export function LongTournamentsPage() {
         </button>
       </header>
 
-      {/* Tournament cards */}
       <div className="space-y-3">
         {loading ? (
           <div className="card"><p className="text-xs text-slate-400">Loading…</p></div>
         ) : tournaments.length === 0 ? (
           <div className="card py-10 text-center border-violet-800/30 space-y-3">
             <p className="text-xs text-slate-500">No long tournaments yet for this game.</p>
-            <button
-              type="button"
-              className="text-xs rounded-lg px-3 py-1.5 bg-violet-900/40 text-violet-300 border border-violet-700/50 hover:bg-violet-800/40 transition-colors"
-              onClick={openCreate}
-            >
-              Create your first one
-            </button>
+            <button type="button" className="text-xs rounded-lg px-3 py-1.5 bg-violet-900/40 text-violet-300 border border-violet-700/50 hover:bg-violet-800/40 transition-colors" onClick={openCreate}>Create your first one</button>
           </div>
         ) : (
           tournaments.map((t) => (
@@ -119,6 +110,7 @@ export function LongTournamentsPage() {
               onArchive={openArchive}
               onDelete={openDelete}
               navigate={navigate}
+              detailPath={`/${gameId}/long-tournaments/${t.id}`}
             />
           ))
         )}
