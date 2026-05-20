@@ -10,6 +10,7 @@ import { DashboardPage } from './pages/Dashboard';
 import { PlayersPage } from './pages/Players';
 import { GlobalPlayersPage } from './pages/GlobalPlayers';
 import { TournamentsPage } from './pages/Tournaments';
+import { TournamentDetailPage } from './pages/TournamentDetail';
 import { RegistrationsPage } from './pages/Registrations';
 import { PaymentsPage } from './pages/Payments';
 import { ComplaintsPage } from './pages/Complaints';
@@ -107,14 +108,13 @@ function AdminShell() {
     <Routes>
       <Route path="games" element={<GameSelectPage user={user} />} />
 
-      {/* Global Tournvia accounts page */}
       <Route path="players" element={<GlobalPlayersShell user={user} />} />
 
-      {/* Game-scoped admin */}
       <Route path=":gameId" element={<AdminLayout user={user} />}>
         <Route index element={<DashboardPage navigate={navigate} />} />
         <Route path="players" element={<PlayersPage />} />
         <Route path="tournaments" element={<TournamentsPage />} />
+        <Route path="tournaments/:tournamentId" element={<TournamentDetailPage />} />
         <Route path="registrations" element={<RegistrationsPage />} />
         <Route path="brackets" element={<BracketManagerPage />} />
         <Route path="results" element={<ResultsPage />} />
@@ -133,7 +133,9 @@ function AdminShell() {
 
 function RedirectToGames() {
   const navigate = useNavigate();
-  React.useEffect(() => { navigate('/games', { replace: true }); }, [navigate]);
+  React.useEffect(() => {
+    navigate('/games', { replace: true });
+  }, [navigate]);
   return null;
 }
 

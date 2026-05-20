@@ -1,9 +1,8 @@
 import React from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import { calculateBrPoints } from '../constants';
 import { Toast } from '../components/Toast';
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
 
 function teammateCount(teamSize) {
   const n = Number(teamSize);
@@ -12,7 +11,6 @@ function teammateCount(teamSize) {
   return 3;
 }
 
-// Returns array of { uid, name } for a registration, using uidToName map
 function buildPlayerEntries(reg, uidToName) {
   const all = [
     reg.host_uid,
@@ -22,11 +20,9 @@ function buildPlayerEntries(reg, uidToName) {
   ].filter(Boolean);
   return all.map((uid) => ({
     uid,
-    name: uidToName[uid] || uid, // fallback to UID if name not found
+    name: uidToName[uid] || uid,
   }));
 }
-
-// ─── CS / LW Result Entry ─────────────────────────────────────────────────────
 
 function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   const totalRounds = Number(tournament.total_rounds) || 13;
@@ -43,17 +39,18 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   const [matchData, setMatchData] = React.useState([]);
 
   React.useEffect(() => {
-    setMatchData(
-      pairs.map(() => ({ roundsA: '', roundsB: '', winner: '', players: {} }))
-    );
+    setMatchData(pairs.map(() => ({ roundsA: '', roundsB: '', winner: '', players: {} })));
   }, [pairs]);
 
   const [saving, setSaving] = React.useState(false);
   const [toast, setToast] = React.useState(null);
-  const notify = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
+  const notify = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   function setRounds(pairIdx, side, val) {
-    setMatchData(prev => {
+    setMatchData((prev) => {
       const next = [...prev];
       next[pairIdx] = { ...next[pairIdx], [side === 'a' ? 'roundsA' : 'roundsB']: val };
       return next;
@@ -61,7 +58,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   }
 
   function setWinner(pairIdx, val) {
-    setMatchData(prev => {
+    setMatchData((prev) => {
       const next = [...prev];
       next[pairIdx] = { ...next[pairIdx], winner: val };
       return next;
@@ -69,9 +66,12 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   }
 
   function setPlayerStat(pairIdx, uid, field, val) {
-    setMatchData(prev => {
+    setMatchData((prev) => {
       const next = [...prev];
-      const players = { ...next[pairIdx].players, [uid]: { ...(next[pairIdx].players[uid] || {}), [field]: val } };
+      const players = {
+        ...next[pairIdx].players,
+        [uid]: { ...(next[pairIdx].players[uid] || {}), [field]: val },
+      };
       next[pairIdx] = { ...next[pairIdx], players };
       return next;
     });
@@ -102,7 +102,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
       };
     });
 
-    const winnerTeam = matches.find(m => m.winner_team)?.winner_team || null;
+    const winnerTeam = matches.find((m) => m.winner_team)?.winner_team || null;
 
     const { error } = await supabaseAdmin
       .from('tournaments')
@@ -113,7 +113,10 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
       .eq('id', tournament.id);
 
     setSaving(false);
-    if (error) { notify('Failed to save: ' + error.message, 'error'); return; }
+    if (error) {
+      notify(`Failed to save: ${error.message}`, 'error');
+      return;
+    }
     notify('Results saved!');
     if (onSaved) onSaved();
   }
@@ -146,14 +149,25 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   return (
     <div className="space-y-6">
       {toast && (
-        <div className={`rounded-lg px-3 py-2 text-xs ${
-          toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
-        }`}>{toast.msg}</div>
+        <div
+          className={`rounded-lg px-3 py-2 text-xs ${
+            toast.type === 'error'
+              ? 'bg-red-500/10 text-red-400'
+              : 'bg-emerald-500/10 text-emerald-400'
+          }`}
+        >
+          {toast.msg}
+        </div>
       )}
 
       <div className="rounded-lg bg-sky-500/10 border border-sky-700 px-4 py-2 text-xs text-sky-300 flex gap-6">
-        <span>Total rounds: <strong className="text-slate-100">{totalRounds}</strong></span>
-        <span>Objective (rounds to win): <strong className="text-amber-300">{objectiveRounds}</strong></span>
+        <span>
+          Total rounds: <strong className="text-slate-100">{totalRounds}</strong>
+        </span>
+        <span>
+          Objective (rounds to win):{' '}
+          <strong className="text-amber-300">{objectiveRounds}</strong>
+        </span>
       </div>
 
       {pairs.map((pair, pairIdx) => {
@@ -173,7 +187,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
                 team={pair.a}
                 playerEntries={entriesA}
                 rounds={md.roundsA}
-                onRoundsChange={v => setRounds(pairIdx, 'a', v)}
+                onRoundsChange={(v) => setRounds(pairIdx, 'a', v)}
                 playerStats={md.players}
                 onStatChange={(uid, field, val) => setPlayerStat(pairIdx, uid, field, val)}
                 isWinner={md.winner === 'a'}
@@ -186,7 +200,9 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
                   <button
                     onClick={() => setWinner(pairIdx, md.winner === 'a' ? '' : 'a')}
                     className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${
-                      md.winner === 'a' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                      md.winner === 'a'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}
                   >
                     {pair.a.team_name.substring(0, 10)}
@@ -194,7 +210,9 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
                   <button
                     onClick={() => setWinner(pairIdx, md.winner === 'b' ? '' : 'b')}
                     className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${
-                      md.winner === 'b' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                      md.winner === 'b'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}
                   >
                     {pair.b.team_name.substring(0, 10)}
@@ -206,7 +224,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
                 team={pair.b}
                 playerEntries={entriesB}
                 rounds={md.roundsB}
-                onRoundsChange={v => setRounds(pairIdx, 'b', v)}
+                onRoundsChange={(v) => setRounds(pairIdx, 'b', v)}
                 playerStats={md.players}
                 onStatChange={(uid, field, val) => setPlayerStat(pairIdx, uid, field, val)}
                 isWinner={md.winner === 'b'}
@@ -225,14 +243,20 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
 
 function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, onStatChange, isWinner }) {
   return (
-    <div className={`rounded-xl border p-3 space-y-3 transition-colors ${
-      isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'
-    }`}>
+    <div
+      className={`rounded-xl border p-3 space-y-3 transition-colors ${
+        isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'
+      }`}
+    >
       <div className="flex items-center gap-2">
         <div className="w-5 h-5 rounded bg-slate-700 border border-slate-600 flex-shrink-0" />
-        <span className="font-bold text-sm text-slate-100 truncate">{team.team_name.toUpperCase()}</span>
+        <span className="font-bold text-sm text-slate-100 truncate">
+          {team.team_name.toUpperCase()}
+        </span>
         {isWinner && (
-          <span className="ml-auto text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">Winner</span>
+          <span className="ml-auto text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+            Winner
+          </span>
         )}
       </div>
 
@@ -242,7 +266,7 @@ function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, o
           type="number"
           min="0"
           value={rounds}
-          onChange={e => onRoundsChange(e.target.value)}
+          onChange={(e) => onRoundsChange(e.target.value)}
           className="input w-16 text-xs text-center"
           placeholder="0"
         />
@@ -257,12 +281,14 @@ function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, o
         <div className="space-y-1">
           {playerEntries.map(({ uid, name }) => (
             <div key={uid} className="grid grid-cols-3 gap-1 items-center">
-              <span className="text-[11px] text-slate-200 truncate" title={uid}>{name}</span>
+              <span className="text-[11px] text-slate-200 truncate" title={uid}>
+                {name}
+              </span>
               <input
                 type="number"
                 min="0"
                 value={playerStats[uid]?.kills ?? ''}
-                onChange={e => onStatChange(uid, 'kills', e.target.value)}
+                onChange={(e) => onStatChange(uid, 'kills', e.target.value)}
                 placeholder="K"
                 className="input w-full text-xs text-center py-1"
               />
@@ -270,7 +296,7 @@ function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, o
                 type="number"
                 min="0"
                 value={playerStats[uid]?.deaths ?? ''}
-                onChange={e => onStatChange(uid, 'deaths', e.target.value)}
+                onChange={(e) => onStatChange(uid, 'deaths', e.target.value)}
                 placeholder="D"
                 className="input w-full text-xs text-center py-1"
               />
@@ -282,9 +308,17 @@ function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, o
   );
 }
 
-// ─── BR Result Entry ──────────────────────────────────────────────────────────
-
-function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, onSaveBr, saving, winnerText, setWinnerText }) {
+function BrResultEntry({
+  tournament,
+  teams,
+  uidToName,
+  brRows,
+  onChangeBrRow,
+  onSaveBr,
+  saving,
+  winnerText,
+  setWinnerText,
+}) {
   return (
     <div className="space-y-4">
       <h2 className="text-sm font-semibold text-slate-100">Single Match · Battle Royale</h2>
@@ -312,17 +346,27 @@ function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, on
                     <td>
                       <div className="space-y-0.5">
                         {entries.map(({ uid, name }) => (
-                          <div key={uid} className="text-[11px] text-slate-300">{name}</div>
+                          <div key={uid} className="text-[11px] text-slate-300">
+                            {name}
+                          </div>
                         ))}
                       </div>
                     </td>
                     <td>
-                      <input type="number" className="input w-20 text-xs" value={row.kills}
-                        onChange={e => onChangeBrRow(idx, 'kills', e.target.value)} />
+                      <input
+                        type="number"
+                        className="input w-20 text-xs"
+                        value={row.kills}
+                        onChange={(e) => onChangeBrRow(idx, 'kills', e.target.value)}
+                      />
                     </td>
                     <td>
-                      <input type="number" className="input w-20 text-xs" value={row.position}
-                        onChange={e => onChangeBrRow(idx, 'position', e.target.value)} />
+                      <input
+                        type="number"
+                        className="input w-20 text-xs"
+                        value={row.position}
+                        onChange={(e) => onChangeBrRow(idx, 'position', e.target.value)}
+                      />
                     </td>
                     <td className="font-semibold text-sky-300">{row.points}</td>
                   </tr>
@@ -334,8 +378,12 @@ function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, on
       </div>
       <div className="card space-y-2 text-xs">
         <label className="label">Winner announcement</label>
-        <textarea rows={3} className="input resize-none" value={winnerText}
-          onChange={e => setWinnerText(e.target.value)} />
+        <textarea
+          rows={3}
+          className="input resize-none"
+          value={winnerText}
+          onChange={(e) => setWinnerText(e.target.value)}
+        />
         <div className="flex justify-end">
           <button className="btn-primary" disabled={saving} onClick={onSaveBr}>
             {saving ? 'Saving…' : 'Save BR Results'}
@@ -346,13 +394,14 @@ function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, on
   );
 }
 
-// ─── End Tournament Button ────────────────────────────────────────────────────
-
 function EndTournamentSection({ tournament, onEnded }) {
   const [confirm, setConfirm] = React.useState(false);
   const [ending, setEnding] = React.useState(false);
   const [toast, setToast] = React.useState(null);
-  const notify = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
+  const notify = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const isEnded = tournament.status === 'ended';
 
@@ -363,7 +412,10 @@ function EndTournamentSection({ tournament, onEnded }) {
       .update({ status: 'ended', registration_status: 'closed' })
       .eq('id', tournament.id);
     setEnding(false);
-    if (error) { notify('Error: ' + error.message, 'error'); return; }
+    if (error) {
+      notify(`Error: ${error.message}`, 'error');
+      return;
+    }
     notify('Tournament ended! Players will now see results.');
     setConfirm(false);
     if (onEnded) onEnded();
@@ -372,9 +424,15 @@ function EndTournamentSection({ tournament, onEnded }) {
   return (
     <div className="card space-y-3 border border-red-900/40 bg-red-500/5">
       {toast && (
-        <div className={`rounded-lg px-3 py-2 text-xs ${
-          toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
-        }`}>{toast.msg}</div>
+        <div
+          className={`rounded-lg px-3 py-2 text-xs ${
+            toast.type === 'error'
+              ? 'bg-red-500/10 text-red-400'
+              : 'bg-emerald-500/10 text-emerald-400'
+          }`}
+        >
+          {toast.msg}
+        </div>
       )}
 
       <div className="flex items-center justify-between">
@@ -395,15 +453,23 @@ function EndTournamentSection({ tournament, onEnded }) {
           </button>
         )}
         {isEnded && (
-          <span className="text-xs text-emerald-400 font-semibold px-3 py-1 bg-emerald-500/10 rounded-full">Ended</span>
+          <span className="text-xs text-emerald-400 font-semibold px-3 py-1 bg-emerald-500/10 rounded-full">
+            Ended
+          </span>
         )}
       </div>
 
       {confirm && !isEnded && (
         <div className="rounded-lg bg-red-500/10 border border-red-700 p-3 space-y-2">
-          <p className="text-xs text-red-300 font-semibold">⚠️ Are you sure? This will close registrations and show results to all players.</p>
+          <p className="text-xs text-red-300 font-semibold">
+            ⚠️ Are you sure? This will close registrations and show results to all players.
+          </p>
           <div className="flex gap-2">
-            <button onClick={handleEnd} disabled={ending} className="btn-primary bg-red-600 hover:bg-red-500 text-xs">
+            <button
+              onClick={handleEnd}
+              disabled={ending}
+              className="btn-primary bg-red-600 hover:bg-red-500 text-xs"
+            >
               {ending ? 'Ending…' : 'Yes, End Tournament'}
             </button>
             <button
@@ -419,9 +485,10 @@ function EndTournamentSection({ tournament, onEnded }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
 export function ResultsPage() {
+  const { gameId } = useParams();
+  const [searchParams] = useSearchParams();
+
   const [tournaments, setTournaments] = React.useState([]);
   const [selected, setSelected] = React.useState(null);
   const [teams, setTeams] = React.useState([]);
@@ -441,12 +508,21 @@ export function ResultsPage() {
       .from('tournaments')
       .select('id, title, type, mode, total_rounds, status, team_size')
       .eq('is_archived', false)
+      .eq('game_id', gameId)
       .order('start_time', { ascending: false });
     if (error) console.error(error);
     setTournaments(data || []);
+
+    const tid = searchParams.get('tournamentId');
+    if (tid && (data || []).some((t) => String(t.id) === String(tid))) {
+      handleSelectTournament(tid, data || []);
+    }
   }
 
-  React.useEffect(() => { loadTournaments(); }, []);
+  React.useEffect(() => {
+    loadTournaments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
 
   const loadTeams = async (tid) => {
     const { data: regsData } = await supabaseAdmin
@@ -458,7 +534,6 @@ export function ResultsPage() {
     const regs = regsData || [];
     setTeams(regs);
 
-    // Collect all UIDs from all registrations
     const allUids = [];
     regs.forEach((r) => {
       if (r.host_uid) allUids.push(r.host_uid);
@@ -467,7 +542,6 @@ export function ResultsPage() {
       if (r.teammate_uid_3) allUids.push(r.teammate_uid_3);
     });
 
-    // Fetch player names for all collected UIDs
     if (allUids.length > 0) {
       const uniqueUids = [...new Set(allUids)];
       const { data: playersData } = await supabaseAdmin
@@ -491,12 +565,13 @@ export function ResultsPage() {
         kills: '',
         position: '',
         points: 0,
-      }))
+      })),
     );
   };
 
-  const handleSelectTournament = async (id) => {
-    const t = tournaments.find((t) => String(t.id) === String(id)) || null;
+  const handleSelectTournament = async (id, preloadedList) => {
+    const source = preloadedList && preloadedList.length ? preloadedList : tournaments;
+    const t = source.find((tt) => String(tt.id) === String(id)) || null;
     setSelected(t);
     setWinnerText('');
     setTeams([]);
@@ -517,12 +592,14 @@ export function ResultsPage() {
 
   const notifyPlayers = async (playerIds, text) => {
     if (!playerIds?.length) return;
-    const rows = playerIds.filter(Boolean).map((id) => ({
-      player_id: id,
-      title: 'Tournament Result',
-      body: text,
-      type: 'tournament',
-    }));
+    const rows = playerIds
+      .filter(Boolean)
+      .map((id) => ({
+        player_id: id,
+        title: 'Tournament Result',
+        body: text,
+        type: 'tournament',
+      }));
     if (rows.length) await supabaseAdmin.from('notifications').insert(rows);
   };
 
@@ -545,7 +622,11 @@ export function ResultsPage() {
         .insert({ tournament_id: selected.id, total_rounds: 1 })
         .select('id')
         .single();
-      if (error || !newBracket) { notify('Failed to create bracket.', 'error'); setStatus('idle'); return; }
+      if (error || !newBracket) {
+        notify('Failed to create bracket.', 'error');
+        setStatus('idle');
+        return;
+      }
       bracketId = newBracket.id;
     }
 
@@ -555,9 +636,12 @@ export function ResultsPage() {
       .select('id')
       .single();
 
-    if (matchErr || !matchData) { notify('Failed to create match.', 'error'); setStatus('idle'); return; }
+    if (matchErr || !matchData) {
+      notify('Failed to create match.', 'error');
+      setStatus('idle');
+      return;
+    }
 
-    // Build payload — store player_names JSON alongside team scores
     const payload = brRows.map((r, idx) => {
       const reg = teams[idx];
       const entries = reg ? buildPlayerEntries(reg, uidToName) : [];
@@ -567,7 +651,7 @@ export function ResultsPage() {
         kills: Number(r.kills || 0),
         position: Number(r.position || 0),
         points: r.points,
-        player_names: entries.map(e => e.name),
+        player_names: entries.map((e) => e.name),
       };
     });
 
@@ -575,10 +659,17 @@ export function ResultsPage() {
       .from('long_br_match_scores')
       .upsert(payload, { onConflict: 'match_id,team_name' });
 
-    if (scoresErr) { notify('Failed to save scores: ' + scoresErr.message, 'error'); setStatus('idle'); return; }
+    if (scoresErr) {
+      notify(`Failed to save scores: ${scoresErr.message}`, 'error');
+      setStatus('idle');
+      return;
+    }
 
     if (winnerText.trim()) {
-      await supabaseAdmin.from('tournaments').update({ winner_text: winnerText.trim() }).eq('id', selected.id);
+      await supabaseAdmin
+        .from('tournaments')
+        .update({ winner_text: winnerText.trim() })
+        .eq('id', selected.id);
       const playerIds = brRows.map((r) => r.host_player_id).filter(Boolean);
       await notifyPlayers(playerIds, `Results are out for your tournament! ${winnerText.trim()}`);
     }
@@ -599,7 +690,6 @@ export function ResultsPage() {
         <p className="text-xs text-slate-400">Enter match results and end the tournament for players.</p>
       </header>
 
-      {/* Tournament selector */}
       <div className="card space-y-3 text-xs">
         <label className="label">Tournament</label>
         <select
@@ -617,7 +707,6 @@ export function ResultsPage() {
         </select>
       </div>
 
-      {/* CS / LW result entry */}
       {selected && isCSorLW && (
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-slate-100">
@@ -627,12 +716,14 @@ export function ResultsPage() {
             tournament={selected}
             teams={teams}
             uidToName={uidToName}
-            onSaved={() => { notify('CS/LW results saved!'); loadTeams(selected.id); }}
+            onSaved={() => {
+              notify('CS/LW results saved!');
+              loadTeams(selected.id);
+            }}
           />
         </section>
       )}
 
-      {/* BR result entry */}
       {selected && isSingleBR && (
         <section>
           <BrResultEntry
@@ -649,7 +740,6 @@ export function ResultsPage() {
         </section>
       )}
 
-      {/* End Tournament */}
       {selected && (
         <EndTournamentSection
           tournament={selected}

@@ -1,10 +1,13 @@
 import React from 'react';
+import { useParams } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 
 const FILTERS = ['all', 'pending', 'confirmed'];
 
 export function PaymentsPage() {
+  const { gameId } = useParams();
+
   const [registrations, setRegistrations] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState('all');
@@ -33,28 +36,33 @@ export function PaymentsPage() {
         payment_id,
         slot_reserved_at,
         created_at,
-        tournaments ( id, title, entry_fee, mode, format_label ),
+        tournaments ( id, title, entry_fee, mode, format_label, game_id ),
         players!host_player_id ( full_name, ff_uid, phone )
       `)
+      .eq('tournaments.game_id', gameId)
       .order('created_at', { ascending: false });
     if (error) console.error(error);
     setRegistrations(data || []);
     setLoading(false);
   };
 
-  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
 
   const filtered = registrations.filter((r) => {
     const matchStatus = filter === 'all' ? true : r.status === filter;
     if (!search.trim()) return matchStatus;
     const q = search.toLowerCase();
-    return matchStatus && (
-      r.host_uid?.toLowerCase().includes(q) ||
-      r.team_name?.toLowerCase().includes(q) ||
-      r.players?.full_name?.toLowerCase().includes(q) ||
-      r.razorpay_order_id?.toLowerCase().includes(q) ||
-      r.payment_id?.toLowerCase().includes(q) ||
-      r.tournaments?.title?.toLowerCase().includes(q)
+    return (
+      matchStatus &&
+      (r.host_uid?.toLowerCase().includes(q) ||
+        r.team_name?.toLowerCase().includes(q) ||
+        r.players?.full_name?.toLowerCase().includes(q) ||
+        r.razorpay_order_id?.toLowerCase().includes(q) ||
+        r.payment_id?.toLowerCase().includes(q) ||
+        r.tournaments?.title?.toLowerCase().includes(q))
     );
   });
 
@@ -63,7 +71,7 @@ export function PaymentsPage() {
     .reduce((sum, r) => sum + Number(r.tournaments?.entry_fee || 0), 0);
 
   const pendingCount = registrations.filter(
-    (r) => r.status === 'pending' && r.razorpay_order_id
+    (r) => r.status === 'pending' && r.razorpay_order_id,
   ).length;
 
   return (
@@ -72,10 +80,9 @@ export function PaymentsPage() {
         <div>
           <h1 className="text-xl font-semibold text-slate-50">Payments</h1>
           <p className="text-xs text-slate-400">
-            Automatic Razorpay payments — all registrations with payment info.
+            Automatic Razorpay payments — all registrations with payment info for this game.
           </p>
         </div>
-        {/* KPI pills */}
         <div className="flex flex-wrap gap-2 text-[11px]">
           <div className="rounded-lg bg-slate-800/60 px-3 py-1.5 ring-1 ring-slate-700">
             <span className="text-slate-400">Total confirmed revenue</span>
@@ -92,7 +99,6 @@ export function PaymentsPage() {
         </div>
       </header>
 
-      {/* Filters + Search */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1">
           {FILTERS.map((f) => (
@@ -145,7 +151,6 @@ export function PaymentsPage() {
                   <tr key={r.id}>
                     <td className="text-slate-500">{idx + 1}</td>
 
-                    {/* Player */}
                     <td>
                       <div>{r.players?.full_name || '—'}</div>
                       {r.players?.phone && (
@@ -153,10 +158,8 @@ export function PaymentsPage() {
                       )}
                     </td>
 
-                    {/* UID */}
                     <td className="font-mono">{r.host_uid}</td>
 
-                    {/* Tournament title */}
                     <td>
                       <div>{r.tournaments?.title || '—'}</div>
                       <div className="text-[10px] text-slate-500 uppercase">
@@ -164,35 +167,35 @@ export function PaymentsPage() {
                       </div>
                     </td>
 
-                    {/* Tournament ID — short form for readability */}
                     <td>
                       <span
                         className="font-mono text-[10px] text-slate-400 cursor-pointer hover:text-slate-200"
                         title={r.tournaments?.id}
                         onClick={() => navigator.clipboard?.writeText(r.tournaments?.id || '')}
                       >
-                        {r.tournaments?.id ? r.tournaments.id.slice(0, 8) + '…' : '—'}
+                        {r.tournaments?.id ? `${r.tournaments.id.slice(0, 8)}…` : '—'}
                       </span>
                     </td>
 
-                    {/* Amount */}
                     <td>
                       {r.tournaments?.entry_fee != null ? (
                         <span className="font-semibold text-emerald-400">
                           ₹{Number(r.tournaments.entry_fee).toLocaleString()}
                         </span>
-                      ) : '—'}
+                      ) : (
+                        '—'
+                      )}
                     </td>
 
-                    {/* Team name */}
                     <td>{r.team_name || '—'}</td>
 
-                    {/* Teammates */}
                     <td>
                       {teammates.length > 0 ? (
                         <div className="space-y-0.5">
                           {teammates.map((uid, i) => (
-                            <div key={i} className="font-mono text-[10px] text-slate-400">{uid}</div>
+                            <div key={uid || i} className="font-mono text-[10px] text-slate-400">
+                              {uid}
+                            </div>
                           ))}
                         </div>
                       ) : (
@@ -200,37 +203,49 @@ export function PaymentsPage() {
                       )}
                     </td>
 
-                    {/* Razorpay Order ID */}
                     <td>
                       {r.razorpay_order_id ? (
-                        <span className="font-mono text-[10px] text-sky-400">{r.razorpay_order_id}</span>
+                        <span className="font-mono text-[10px] text-sky-400">
+                          {r.razorpay_order_id}
+                        </span>
                       ) : (
                         <span className="text-slate-600 text-[10px]">No order</span>
                       )}
                     </td>
 
-                    {/* Razorpay Payment ID */}
                     <td>
                       {r.payment_id ? (
-                        <span className="font-mono text-[10px] text-emerald-400">{r.payment_id}</span>
+                        <span className="font-mono text-[10px] text-emerald-400">
+                          {r.payment_id}
+                        </span>
                       ) : (
                         <span className="text-slate-600 text-[10px]">Not paid</span>
                       )}
                     </td>
 
-                    {/* Paid at */}
                     <td className="text-slate-400 whitespace-nowrap">
                       {r.slot_reserved_at
                         ? new Date(r.slot_reserved_at).toLocaleString('en-IN', {
-                            day: '2-digit', month: 'short', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit',
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
                           })
                         : '—'}
                     </td>
 
-                    {/* Status */}
                     <td>
-                      <span className={'status-pill ' + (r.status === 'confirmed' ? 'approved' : r.status === 'pending' ? 'pending' : '')}>
+                      <span
+                        className={
+                          'status-pill ' +
+                          (r.status === 'confirmed'
+                            ? 'approved'
+                            : r.status === 'pending'
+                            ? 'pending'
+                            : '')
+                        }
+                      >
                         {r.status}
                       </span>
                     </td>

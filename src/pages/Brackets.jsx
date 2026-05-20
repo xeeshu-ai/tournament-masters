@@ -1,5 +1,5 @@
 import React from 'react';
-// ✅ Fix — use named imports
+import { useSearchParams } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 import { isPowerOfTwo } from '../constants';
@@ -12,6 +12,7 @@ export function BracketManagerPage() {
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [toast, setToast] = React.useState(null);
+  const [searchParams] = useSearchParams();
 
   const notify = (msg, type = 'success') => {
     setToast({ message: msg, type });
@@ -28,15 +29,21 @@ export function BracketManagerPage() {
         .eq('is_archived', false)
         .order('id', { ascending: false });
       if (error) {
-        // eslint-disable-next-line no-console
         console.error(error);
       }
       setTournaments(data || []);
+
+      const tid = searchParams.get('tournamentId');
+      if (tid && (data || []).some((t) => String(t.id) === String(tid))) {
+        setSelectedId(tid);
+        loadBracket(tid);
+      }
     }
     loadTournaments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadBracket = async (tid) => {
+  async function loadBracket(tid) {
     if (!tid) {
       setBracket(null);
       setMatchesByRound({});
@@ -51,12 +58,11 @@ export function BracketManagerPage() {
       .eq('tournament_id', tid)
       .maybeSingle();
     if (bracketErr) {
-      // eslint-disable-next-line no-console
       console.error(bracketErr);
     }
     setBracket(bracketRow || null);
 
-    // ✅ Fix: long_br_matches has no tournament_id column — query via bracket_id
+    // long_br_matches has bracket_id, not tournament_id
     if (bracketRow) {
       const { data: matches, error: matchErr } = await supabaseAdmin
         .from('long_br_matches')
@@ -65,7 +71,6 @@ export function BracketManagerPage() {
         .order('round_number', { ascending: true })
         .order('match_number', { ascending: true });
       if (matchErr) {
-        // eslint-disable-next-line no-console
         console.error(matchErr);
       }
       const grouped = {};
@@ -79,7 +84,7 @@ export function BracketManagerPage() {
     }
 
     setLoading(false);
-  };
+  }
 
   const handleSelect = (value) => {
     setSelectedId(value);
@@ -104,7 +109,6 @@ export function BracketManagerPage() {
       .eq('tournament_id', selectedId)
       .eq('status', 'confirmed');
     if (regErr) {
-      // eslint-disable-next-line no-console
       console.error(regErr);
       notify('Failed to load registrations.', 'error');
       setSaving(false);
@@ -118,34 +122,26 @@ export function BracketManagerPage() {
       return;
     }
 
-    // Fisher–Yates shuffle
     const shuffled = [...teams];
     for (let i = shuffled.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    // Upsert bracket row
     const { data: bracketRow, error: bErr } = await supabaseAdmin
       .from('long_brackets')
       .upsert({ tournament_id: selectedId, current_round: 1 }, { onConflict: 'tournament_id' })
       .select('*')
       .maybeSingle();
     if (bErr || !bracketRow) {
-      // eslint-disable-next-line no-console
       console.error(bErr);
       notify('Failed to create bracket.', 'error');
       setSaving(false);
       return;
     }
 
-    // ✅ Fix: delete existing matches via bracket_id, not tournament_id
-    await supabaseAdmin
-      .from('long_br_matches')
-      .delete()
-      .eq('bracket_id', bracketRow.id);
+    await supabaseAdmin.from('long_br_matches').delete().eq('bracket_id', bracketRow.id);
 
-    // ✅ Fix: insert matches with bracket_id only — no tournament_id column on this table
     const round1 = [];
     for (let i = 0; i < shuffled.length; i += 2) {
       const a = shuffled[i];
@@ -162,7 +158,6 @@ export function BracketManagerPage() {
 
     const { error: insertErr } = await supabaseAdmin.from('long_br_matches').insert(round1);
     if (insertErr) {
-      // eslint-disable-next-line no-console
       console.error(insertErr);
       notify('Failed to save fixtures.', 'error');
       setSaving(false);
@@ -201,7 +196,6 @@ export function BracketManagerPage() {
           const a = winners[i];
           const b = winners[i + 1];
           if (!a || !b) break;
-          // ✅ Fix: use bracket_id only, no tournament_id
           nextMatches.push({
             bracket_id: bracketId,
             round_number: nextRound,
@@ -217,7 +211,6 @@ export function BracketManagerPage() {
       }
     }
 
-    // ✅ Fix: delete via bracket_id
     await supabaseAdmin.from('long_br_matches').delete().eq('bracket_id', bracketId);
     if (allMatches.length) {
       await supabaseAdmin.from('long_br_matches').insert(allMatches);
@@ -225,7 +218,6 @@ export function BracketManagerPage() {
   };
 
   const handleWinnerChange = async (match, winnerId) => {
-    // winnerId is a UUID string — do NOT cast to Number()
     if (!winnerId) return;
     setSaving(true);
 
@@ -234,14 +226,12 @@ export function BracketManagerPage() {
       .update({ winner_registration_id: winnerId })
       .eq('id', match.id);
     if (error) {
-      // eslint-disable-next-line no-console
       console.error(error);
       notify('Failed to update winner.', 'error');
       setSaving(false);
       return;
     }
 
-    // ✅ Fix: reload matches via bracket_id
     const { data: matches, error: matchErr } = await supabaseAdmin
       .from('long_br_matches')
       .select('*')
@@ -249,7 +239,6 @@ export function BracketManagerPage() {
       .order('round_number', { ascending: true })
       .order('match_number', { ascending: true });
     if (matchErr) {
-      // eslint-disable-next-line no-console
       console.error(matchErr);
       notify('Failed to reload matches.', 'error');
       setSaving(false);
@@ -346,7 +335,6 @@ export function BracketManagerPage() {
                         placeholder="Paste winner registration UUID"
                         defaultValue={m.winner_registration_id || ''}
                         onBlur={(e) => {
-                          // ✅ Pass raw UUID string — do NOT wrap with Number()
                           const value = e.target.value.trim();
                           if (value && value !== (m.winner_registration_id || '')) {
                             handleWinnerChange(m, value);
