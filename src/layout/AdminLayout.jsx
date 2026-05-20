@@ -14,10 +14,9 @@ const navItems = [
 
   { section: 'Management' },
   { to: 'registrations', label: 'Registrations' },
-  { to: 'brackets',      label: 'Bracket Manager' },
-  { to: 'results',       label: 'Results Entry' },
   { to: 'payments',      label: 'Payments' },
   { to: 'rooms',         label: 'Room Codes' },
+  { to: 'results',       label: 'Results Entry' },
 
   { section: 'Players' },
   { to: 'names',    label: 'Name Changes' },

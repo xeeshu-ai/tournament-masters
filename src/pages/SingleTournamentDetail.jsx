@@ -19,6 +19,7 @@ export function SingleTournamentDetailPage() {
   const [confirmDelete, setConfirmDelete] = React.useState({ open: false });
   const [regSearch, setRegSearch] = React.useState('');
   const [regStatusFilter, setRegStatusFilter] = React.useState('all');
+  const [actionLoading, setActionLoading] = React.useState(null); // reg id being actioned
 
   const notify = (message, type = 'success') => {
     setToast({ message, type });
@@ -65,6 +66,29 @@ export function SingleTournamentDetailPage() {
     notify('Tournament deleted permanently.');
     setConfirmDelete({ open: false });
     navigate(`/${gameId}/single-tournaments`);
+  };
+
+  const handleRegStatus = async (reg, newStatus) => {
+    setActionLoading(reg.id);
+    const updates = { status: newStatus };
+    // When confirming, bump filled_slots; when rejecting a previously confirmed reg, decrement
+    if (newStatus === 'confirmed' && reg.status !== 'confirmed') {
+      const { error } = await supabaseAdmin.from('tournament_registrations').update(updates).eq('id', reg.id);
+      if (!error) {
+        await supabaseAdmin.from('tournaments').update({ filled_slots: (tournament.filled_slots || 0) + 1 }).eq('id', tournament.id);
+      } else { notify('Failed to confirm registration.', 'error'); setActionLoading(null); return; }
+    } else if (newStatus === 'rejected') {
+      const { error } = await supabaseAdmin.from('tournament_registrations').update(updates).eq('id', reg.id);
+      if (!error && reg.status === 'confirmed') {
+        await supabaseAdmin.from('tournaments').update({ filled_slots: Math.max(0, (tournament.filled_slots || 0) - 1) }).eq('id', tournament.id);
+      } else if (error) { notify('Failed to reject registration.', 'error'); setActionLoading(null); return; }
+    } else {
+      const { error } = await supabaseAdmin.from('tournament_registrations').update(updates).eq('id', reg.id);
+      if (error) { notify('Failed to update registration.', 'error'); setActionLoading(null); return; }
+    }
+    notify(`Registration ${newStatus}.`);
+    setActionLoading(null);
+    load();
   };
 
   const confirmed = registrations.filter((r) => r.status === 'confirmed');
@@ -186,7 +210,10 @@ export function SingleTournamentDetailPage() {
       {/* ── Registered teams ── */}
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-100">Registered teams</h2>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-100">Registered teams</h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">Confirm or reject individual registrations directly below.</p>
+          </div>
           <div className="flex gap-2 text-xs">
             <input
               className="input py-1 text-xs w-40"
@@ -198,6 +225,7 @@ export function SingleTournamentDetailPage() {
               <option value="all">All</option>
               <option value="confirmed">Confirmed</option>
               <option value="pending">Pending</option>
+              <option value="rejected">Rejected</option>
             </select>
           </div>
         </div>
@@ -219,11 +247,13 @@ export function SingleTournamentDetailPage() {
                   <th>Order ID</th>
                   <th>Payment ID</th>
                   <th>Registered</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRegs.map((r, idx) => {
                   const teammates = [r.teammate_uid_1, r.teammate_uid_2, r.teammate_uid_3].filter(Boolean);
+                  const isBusy = actionLoading === r.id;
                   return (
                     <tr key={r.id}>
                       <td className="text-slate-500">{idx + 1}</td>
@@ -235,7 +265,7 @@ export function SingleTournamentDetailPage() {
                       <td className="font-mono text-[11px]">{r.host_uid}</td>
                       <td className="text-[10px] text-slate-400">{teammates.join(', ') || '—'}</td>
                       <td>
-                        <span className={'status-pill ' + (r.status === 'confirmed' ? 'approved' : r.status === 'pending' ? 'pending' : '')}>
+                        <span className={'status-pill ' + (r.status === 'confirmed' ? 'approved' : r.status === 'pending' ? 'pending' : 'rejected')}>
                           {r.status}
                         </span>
                       </td>
@@ -243,6 +273,40 @@ export function SingleTournamentDetailPage() {
                       <td className="font-mono text-[10px] text-emerald-400">{r.payment_id || '—'}</td>
                       <td className="whitespace-nowrap text-slate-400">
                         {r.created_at ? new Date(r.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </td>
+                      <td>
+                        <div className="flex gap-1.5">
+                          {r.status !== 'confirmed' && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleRegStatus(r, 'confirmed')}
+                              className="rounded px-2 py-0.5 text-[10px] bg-emerald-900/50 text-emerald-300 border border-emerald-700/40 hover:bg-emerald-800/60 transition-colors disabled:opacity-40"
+                            >
+                              {isBusy ? '…' : 'Confirm'}
+                            </button>
+                          )}
+                          {r.status !== 'rejected' && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleRegStatus(r, 'rejected')}
+                              className="rounded px-2 py-0.5 text-[10px] bg-red-900/40 text-red-400 border border-red-700/40 hover:bg-red-800/60 transition-colors disabled:opacity-40"
+                            >
+                              {isBusy ? '…' : 'Reject'}
+                            </button>
+                          )}
+                          {r.status !== 'pending' && (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleRegStatus(r, 'pending')}
+                              className="rounded px-2 py-0.5 text-[10px] bg-amber-900/40 text-amber-400 border border-amber-700/40 hover:bg-amber-800/60 transition-colors disabled:opacity-40"
+                            >
+                              {isBusy ? '…' : 'Pending'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
