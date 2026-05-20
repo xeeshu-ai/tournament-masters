@@ -3,56 +3,69 @@ import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { supabaseAdmin } from '../supabaseClient'
 import { GAMES } from '../constants'
 
+// Nav sections — items with section: true render a divider + label
 const navItems = [
-  { to: '', label: 'Overview', end: true },
-  { to: 'players', label: 'Players' },
-  // Tournament pages — two dedicated routes
-  { to: 'single-tournaments', label: 'Single Matches' },
-  { to: 'long-tournaments', label: 'Long Tournaments' },
+  { to: '',            label: 'Overview',        end: true },
+  { to: 'players',     label: 'Players' },
+
+  { section: 'Tournaments' },
+  { to: 'single-tournaments', label: 'Single Matches',    accent: 'sky' },
+  { to: 'long-tournaments',   label: 'Long Tournaments',  accent: 'violet' },
+
+  { section: 'Management' },
   { to: 'registrations', label: 'Registrations' },
-  { to: 'brackets', label: 'Bracket Manager' },
-  { to: 'results', label: 'Results Entry' },
-  { to: 'payments', label: 'Payments' },
-  { to: 'rooms', label: 'Room Codes' },
-  { to: 'names', label: 'Name Changes' },
-  { to: 'bans', label: 'Ban Manager' },
-  { to: 'broadcast', label: 'Broadcast' },
+  { to: 'brackets',      label: 'Bracket Manager' },
+  { to: 'results',       label: 'Results Entry' },
+  { to: 'payments',      label: 'Payments' },
+  { to: 'rooms',         label: 'Room Codes' },
+
+  { section: 'Players' },
+  { to: 'names',    label: 'Name Changes' },
+  { to: 'bans',     label: 'Ban Manager' },
+
+  { section: 'Other' },
+  { to: 'broadcast',  label: 'Broadcast' },
   { to: 'complaints', label: 'Complaints' },
 ]
 
 const GAME_ACCENT = {
   orange: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
-  blue: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-  red: 'bg-red-500/15 text-red-300 border-red-500/30',
+  blue:   'bg-blue-500/15 text-blue-300 border-blue-500/30',
+  red:    'bg-red-500/15 text-red-300 border-red-500/30',
 }
 
-// Nav item accent colours for the two tournament routes
-const NAV_ACCENT = {
-  'single-tournaments': { active: 'bg-sky-500/10 text-sky-300', dot: 'bg-sky-500' },
-  'long-tournaments':   { active: 'bg-violet-500/10 text-violet-300', dot: 'bg-violet-500' },
+const ACCENT_STYLES = {
+  sky:    { active: 'bg-sky-500/10 text-sky-300',    dot: 'bg-sky-500',    ring: 'ring-sky-500/60' },
+  violet: { active: 'bg-violet-500/10 text-violet-300', dot: 'bg-violet-500', ring: 'ring-violet-500/60' },
 }
 
 export function AdminLayout({ user, children }) {
-  const navigate = useNavigate()
+  const navigate   = useNavigate()
   const { gameId } = useParams()
   const [drawerOpen, setDrawerOpen] = React.useState(false)
 
   const game = GAMES.find((g) => g.id === gameId)
 
-  const handleLogout = async () => {
-    await supabaseAdmin.auth.signOut()
-    navigate('/login')
-  }
-
-  const handleSwitchGame = () => {
-    navigate('/games')
-  }
+  const handleLogout      = async () => { await supabaseAdmin.auth.signOut(); navigate('/login') }
+  const handleSwitchGame  = ()       => { navigate('/games') }
 
   const NavLinks = ({ onNavigate }) => (
     <nav className="space-y-0.5 text-sm">
-      {navItems.map((item) => {
-        const accent = NAV_ACCENT[item.to]
-        const fullPath = item.to === '' ? `/${gameId}` : `/${gameId}/${item.to}`
+      {navItems.map((item, i) => {
+        // Section divider
+        if (item.section) {
+          return (
+            <div key={`sec-${i}`} className="pt-4 pb-1 first:pt-1">
+              <p className="px-3 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                {item.section}
+              </p>
+            </div>
+          );
+        }
+
+        const accent   = item.accent ? ACCENT_STYLES[item.accent] : null;
+        const fullPath = item.to === '' ? `/${gameId}` : `/${gameId}/${item.to}`;
+
         return (
           <NavLink
             key={item.to}
@@ -60,23 +73,22 @@ export function AdminLayout({ user, children }) {
             end={item.end || false}
             onClick={onNavigate}
             className={({ isActive }) => {
-              const base = 'flex items-center gap-2 rounded-lg px-3 py-2 transition'
+              const base = 'flex items-center gap-2 rounded-lg px-3 py-2 transition';
               if (isActive) {
-                return `${base} ${accent ? accent.active : 'bg-sky-500/10 text-sky-300'}`
+                return `${base} ${accent ? accent.active : 'bg-sky-500/10 text-sky-300'}`;
               }
-              return `${base} text-slate-300 hover:bg-slate-900/70 hover:text-sky-200`
+              return `${base} text-slate-300 hover:bg-slate-900/70 hover:text-sky-200`;
             }}
           >
-            {/* Coloured dot for tournament routes */}
             {accent && (
               <span className={`inline-block h-1.5 w-1.5 rounded-full flex-shrink-0 ${accent.dot}`} />
             )}
             {item.label}
           </NavLink>
-        )
+        );
       })}
     </nav>
-  )
+  );
 
   const BrandBlock = () => (
     <div className="flex items-center gap-2">
@@ -88,7 +100,7 @@ export function AdminLayout({ user, children }) {
         <p className="text-sm font-semibold">Tournvia</p>
       </div>
     </div>
-  )
+  );
 
   const GameBadge = () =>
     game ? (
@@ -108,7 +120,7 @@ export function AdminLayout({ user, children }) {
           </button>
         </div>
       </div>
-    ) : null
+    ) : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
@@ -116,17 +128,26 @@ export function AdminLayout({ user, children }) {
         <div className="fixed inset-0 z-30 bg-black/60 md:hidden" onClick={() => setDrawerOpen(false)} />
       )}
 
+      {/* Mobile drawer */}
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 border-r border-slate-800 bg-slate-950 px-4 py-4 transition-transform duration-200 md:hidden ${
         drawerOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
         <div className="flex items-center justify-between pb-2">
           <BrandBlock />
-          <button onClick={() => setDrawerOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200" aria-label="Close menu">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            aria-label="Close menu"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
           </button>
         </div>
         <GameBadge />
-        <NavLinks onNavigate={() => setDrawerOpen(false)} />
+        <div className="overflow-y-auto">
+          <NavLinks onNavigate={() => setDrawerOpen(false)} />
+        </div>
         <div className="mt-6 border-t border-slate-800 pt-4 text-xs text-slate-400">
           {user && <p className="mb-2 truncate">{user.email}</p>}
           <button onClick={handleLogout} className="btn-secondary w-full text-xs">Logout</button>
@@ -134,22 +155,41 @@ export function AdminLayout({ user, children }) {
       </aside>
 
       <div className="flex min-h-screen">
-        <aside className="hidden w-60 flex-shrink-0 border-r border-slate-800 bg-slate-950/90 px-4 py-4 md:block">
+        {/* Desktop sidebar */}
+        <aside className="hidden w-60 flex-shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 px-4 py-4 md:flex">
           <div className="pb-2"><BrandBlock /></div>
           <GameBadge />
-          <NavLinks onNavigate={() => {}} />
+          <div className="flex-1 overflow-y-auto">
+            <NavLinks onNavigate={() => {}} />
+          </div>
+          <div className="border-t border-slate-800 pt-3 mt-4 text-xs text-slate-400">
+            {user && <p className="mb-2 truncate">{user.email}</p>}
+            <button onClick={handleLogout} className="btn-secondary w-full text-xs">Logout</button>
+          </div>
         </aside>
 
         <main className="flex flex-1 flex-col">
           <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 py-3">
             <div className="flex items-center gap-3 md:hidden">
-              <button onClick={() => setDrawerOpen(true)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200" aria-label="Open menu">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+              <button
+                onClick={() => setDrawerOpen(true)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                aria-label="Open menu"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 12h18M3 6h18M3 18h18"/>
+                </svg>
               </button>
-              {game && <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{game.label}</span>}
+              {game && (
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {game.label}
+                </span>
+              )}
             </div>
             <div className="hidden items-center gap-2 text-sm md:flex">
-              <button onClick={handleSwitchGame} className="text-slate-400 hover:text-slate-200 transition">Games</button>
+              <button onClick={handleSwitchGame} className="text-slate-400 hover:text-slate-200 transition">
+                Games
+              </button>
               {game && (
                 <>
                   <span className="text-slate-700">/</span>
@@ -160,7 +200,9 @@ export function AdminLayout({ user, children }) {
             <div className="flex items-center gap-3 text-xs text-slate-400">
               {user ? (
                 <>
-                  <span className="hidden md:inline">Signed in as <span className="text-slate-100">{user.email}</span></span>
+                  <span className="hidden md:inline">
+                    Signed in as <span className="text-slate-100">{user.email}</span>
+                  </span>
                   <button onClick={handleLogout} className="btn-secondary text-xs">Logout</button>
                 </>
               ) : (
@@ -175,5 +217,5 @@ export function AdminLayout({ user, children }) {
         </main>
       </div>
     </div>
-  )
+  );
 }

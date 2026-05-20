@@ -10,6 +10,8 @@ const GAME_COLORS = {
     icon: 'bg-orange-500/20 text-orange-300',
     hover: 'hover:border-orange-500/50 hover:bg-slate-900/80',
     glow: 'shadow-orange-500/10',
+    singleBtn: 'bg-sky-500/10 border-sky-500/30 text-sky-300 hover:bg-sky-500/20 hover:border-sky-500/60',
+    longBtn: 'bg-violet-500/10 border-violet-500/30 text-violet-300 hover:bg-violet-500/20 hover:border-violet-500/60',
   },
   blue: {
     ring: 'ring-blue-500/60',
@@ -17,6 +19,8 @@ const GAME_COLORS = {
     icon: 'bg-blue-500/20 text-blue-300',
     hover: 'hover:border-blue-500/50 hover:bg-slate-900/80',
     glow: 'shadow-blue-500/10',
+    singleBtn: 'bg-sky-500/10 border-sky-500/30 text-sky-300 hover:bg-sky-500/20 hover:border-sky-500/60',
+    longBtn: 'bg-violet-500/10 border-violet-500/30 text-violet-300 hover:bg-violet-500/20 hover:border-violet-500/60',
   },
   red: {
     ring: 'ring-red-500/60',
@@ -24,21 +28,129 @@ const GAME_COLORS = {
     icon: 'bg-red-500/20 text-red-300',
     hover: 'hover:border-red-500/50 hover:bg-slate-900/80',
     glow: 'shadow-red-500/10',
+    singleBtn: 'bg-sky-500/10 border-sky-500/30 text-sky-300 hover:bg-sky-500/20 hover:border-sky-500/60',
+    longBtn: 'bg-violet-500/10 border-violet-500/30 text-violet-300 hover:bg-violet-500/20 hover:border-violet-500/60',
   },
 };
 
+// ─── Game Hub ────────────────────────────────────────────────────────────────
+// Shown after selecting a game — two big action cards.
+function GameHub({ game, onBack, navigate }) {
+  const c = GAME_COLORS[game.color] || GAME_COLORS.blue;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
+      {/* Back bar */}
+      <header className="flex items-center gap-3 border-b border-slate-800 bg-slate-950/90 px-6 py-3">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          Games
+        </button>
+        <span className="text-slate-700">/</span>
+        <span className="text-sm font-semibold text-slate-200">{game.label}</span>
+      </header>
+
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
+        {/* Game title */}
+        <div className="mb-10 text-center">
+          <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-black ${c.icon}`}>
+            {game.shortLabel}
+          </div>
+          <h1 className="text-2xl font-bold text-slate-100">{game.label}</h1>
+          <p className="mt-2 text-sm text-slate-400">Choose the tournament type you want to manage</p>
+        </div>
+
+        {/* Two big cards */}
+        <div className="grid w-full max-w-2xl grid-cols-1 gap-5 sm:grid-cols-2">
+          {/* Single Matches */}
+          <button
+            type="button"
+            onClick={() => navigate(`/${game.id}/single-tournaments`)}
+            className={`flex flex-col items-start rounded-xl border p-6 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 ${c.singleBtn}`}
+          >
+            {/* Icon */}
+            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-500/20">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-sky-300">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+            </div>
+            <p className="text-base font-semibold text-sky-200">Single Matches</p>
+            <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">
+              One match per tournament — BR, CS, LW or TDM. Results entered after the match ends.
+            </p>
+            <div className="mt-5 flex items-center gap-1.5 text-xs text-sky-400 font-medium">
+              Manage
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Long Tournaments */}
+          <button
+            type="button"
+            onClick={() => navigate(`/${game.id}/long-tournaments`)}
+            className={`flex flex-col items-start rounded-xl border p-6 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 ${c.longBtn}`}
+          >
+            {/* Icon */}
+            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/20">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-violet-300">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M9 21V9" />
+              </svg>
+            </div>
+            <p className="text-base font-semibold text-violet-200">Long Tournaments</p>
+            <p className="mt-1.5 text-xs text-slate-400 leading-relaxed">
+              Multi-match events with bracket management, fixture generation and round tracking.
+            </p>
+            <div className="mt-5 flex items-center gap-1.5 text-xs text-violet-400 font-medium">
+              Manage
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </div>
+          </button>
+        </div>
+
+        {/* Or go to full game dashboard */}
+        <button
+          type="button"
+          onClick={() => navigate(`/${game.id}`)}
+          className="mt-8 text-xs text-slate-500 hover:text-slate-300 transition underline underline-offset-4"
+        >
+          Open full {game.label} dashboard →
+        </button>
+      </main>
+    </div>
+  );
+}
+
+// ─── Game Select Page ─────────────────────────────────────────────────────────
 export function GameSelectPage({ user }) {
   const navigate = useNavigate();
+  const [selectedGame, setSelectedGame] = React.useState(null);
 
   const handleLogout = async () => {
     await supabaseAuth.auth.signOut();
     navigate('/login');
   };
 
-  const handleSelect = (game) => {
-    if (!game.active) return;
-    navigate(`/${game.id}`);
-  };
+  // If a game is selected, show the hub
+  if (selectedGame) {
+    return (
+      <GameHub
+        game={selectedGame}
+        onBack={() => setSelectedGame(null)}
+        navigate={navigate}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
@@ -54,13 +166,11 @@ export function GameSelectPage({ user }) {
           </div>
         </div>
 
-        {/* Right side: Players button + user info + logout */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/players')}
             className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-300 transition hover:border-slate-600 hover:bg-slate-700 hover:text-slate-100"
           >
-            {/* users icon */}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
@@ -83,7 +193,7 @@ export function GameSelectPage({ user }) {
         </div>
       </header>
 
-      {/* Main */}
+      {/* Game grid */}
       <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
         <div className="mb-10 text-center">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Admin Panel</p>
@@ -97,7 +207,7 @@ export function GameSelectPage({ user }) {
             return (
               <button
                 key={game.id}
-                onClick={() => handleSelect(game)}
+                onClick={() => game.active && setSelectedGame(game)}
                 disabled={!game.active}
                 className={[
                   'relative flex flex-col items-start rounded-xl border border-slate-800 bg-slate-900/50 p-5 text-left transition-all duration-150',
@@ -106,16 +216,11 @@ export function GameSelectPage({ user }) {
                     : 'cursor-not-allowed opacity-40',
                 ].join(' ')}
               >
-                {/* Game icon */}
                 <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-lg text-lg font-black ${c.icon}`}>
                   {game.shortLabel}
                 </div>
-
-                {/* Info */}
                 <p className="text-sm font-semibold text-slate-100">{game.label}</p>
                 <p className="mt-1 text-xs text-slate-400">{game.description}</p>
-
-                {/* Status badge */}
                 <div className="mt-4">
                   {game.active ? (
                     <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${c.badge}`}>
@@ -129,8 +234,6 @@ export function GameSelectPage({ user }) {
                     </span>
                   )}
                 </div>
-
-                {/* Arrow on active */}
                 {game.active && (
                   <svg
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600"
