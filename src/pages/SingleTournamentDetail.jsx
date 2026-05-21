@@ -19,6 +19,8 @@ export function SingleTournamentDetailPage() {
   const [confirmDelete, setConfirmDelete] = React.useState({ open: false });
   const [regSearch, setRegSearch] = React.useState('');
   const [regStatusFilter, setRegStatusFilter] = React.useState('all');
+  // Per-row action state: { [regId]: 'confirming' | 'rejecting' | null }
+  const [rowBusy, setRowBusy] = React.useState({});
 
   const notify = (message, type = 'success') => {
     setToast({ message, type });
@@ -39,7 +41,7 @@ export function SingleTournamentDetailPage() {
 
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
-      .select(`id, tournament_id, host_uid, team_name, status, created_at, razorpay_order_id, payment_id, teammate_uid_1, teammate_uid_2, teammate_uid_3, players!host_player_id ( full_name, ff_uid, phone )`)
+      .select(`id, tournament_id, host_uid, host_player_id, team_name, status, created_at, razorpay_order_id, payment_id, teammate_uid_1, teammate_uid_2, teammate_uid_3, players!host_player_id ( full_name, ff_uid, phone )`)
       .eq('tournament_id', tournamentId)
       .order('created_at', { ascending: true });
     if (rErr) console.error(rErr);
@@ -50,6 +52,49 @@ export function SingleTournamentDetailPage() {
   React.useEffect(() => { load(); }, [load]);
 
   const handleBack = () => navigate(`/${gameId}/single-tournaments`);
+
+  /** Confirm a registration + increment filled_slots */
+  const handleConfirm = async (reg) => {
+    setRowBusy((b) => ({ ...b, [reg.id]: 'confirming' }));
+    const { error } = await supabaseAdmin
+      .from('tournament_registrations')
+      .update({ status: 'confirmed' })
+      .eq('id', reg.id);
+    if (error) {
+      notify('Failed to confirm registration.', 'error');
+      setRowBusy((b) => ({ ...b, [reg.id]: null }));
+      return;
+    }
+    // Increment filled_slots on the tournament
+    if (tournament?.id) {
+      await supabaseAdmin.rpc('increment_filled_slots', { tournament_id: tournament.id });
+    }
+    notify(`${reg.team_name || 'Team'} confirmed.`);
+    setRowBusy((b) => ({ ...b, [reg.id]: null }));
+    load();
+  };
+
+  /** Reject / revert a registration back to pending */
+  const handleReject = async (reg) => {
+    setRowBusy((b) => ({ ...b, [reg.id]: 'rejecting' }));
+    const wasConfirmed = reg.status === 'confirmed';
+    const { error } = await supabaseAdmin
+      .from('tournament_registrations')
+      .update({ status: 'pending' })
+      .eq('id', reg.id);
+    if (error) {
+      notify('Failed to reject registration.', 'error');
+      setRowBusy((b) => ({ ...b, [reg.id]: null }));
+      return;
+    }
+    // Decrement filled_slots only if it was previously confirmed
+    if (wasConfirmed && tournament?.id) {
+      await supabaseAdmin.rpc('decrement_filled_slots', { tournament_id: tournament.id });
+    }
+    notify(`${reg.team_name || 'Team'} moved back to pending.`);
+    setRowBusy((b) => ({ ...b, [reg.id]: null }));
+    load();
+  };
 
   const handleArchiveConfirmed = async () => {
     const { error } = await supabaseAdmin.from('tournaments').update({ is_archived: true }).eq('id', tournament.id);
@@ -101,7 +146,7 @@ export function SingleTournamentDetailPage() {
     <div className="space-y-5">
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <button type="button" onClick={handleBack} className="text-xs text-sky-300 hover:text-sky-200 flex items-center gap-1">
@@ -110,7 +155,7 @@ export function SingleTournamentDetailPage() {
           </button>
           <div className="flex items-center gap-2">
             <span className="inline-block w-1 h-5 rounded-full bg-sky-500" />
-            <h1 className="text-xl font-semibold text-slate-50">{tournament?.title || 'Loading…'}</h1>
+            <h1 className="text-xl font-semibold text-slate-50">{tournament?.title || 'Loading\u2026'}</h1>
           </div>
           <div className="flex flex-wrap gap-2 text-[11px] mt-1 ml-3">
             {typeLabel && <span className="badge">{typeLabel}</span>}
@@ -124,33 +169,23 @@ export function SingleTournamentDetailPage() {
 
         {/* Actions */}
         <div className="flex flex-col items-stretch gap-2 text-xs min-w-[200px]">
-          <button type="button" className="btn-primary" onClick={() => navigate(`/${gameId}/results?tournamentId=${tournamentId}`)}>
-            Enter results
-          </button>
-          <button type="button" className="btn-secondary" onClick={() => navigate(`/${gameId}/rooms?tournamentId=${tournamentId}`)}>
-            Room codes
-          </button>
+          <button type="button" className="btn-primary" onClick={() => navigate(`/${gameId}/results?tournamentId=${tournamentId}`)}>Enter results</button>
+          <button type="button" className="btn-secondary" onClick={() => navigate(`/${gameId}/rooms?tournamentId=${tournamentId}`)}>Room codes</button>
           <div className="flex gap-2">
-            <button type="button" className="btn-secondary flex-1" onClick={() => setFormOpen(true)} disabled={loading || !tournament}>
-              Edit
-            </button>
-            <button type="button" className="btn-secondary flex-1" onClick={() => setConfirmArchive({ open: true })} disabled={!tournament}>
-              Archive
-            </button>
+            <button type="button" className="btn-secondary flex-1" onClick={() => setFormOpen(true)} disabled={loading || !tournament}>Edit</button>
+            <button type="button" className="btn-secondary flex-1" onClick={() => setConfirmArchive({ open: true })} disabled={!tournament}>Archive</button>
           </div>
-          <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => setConfirmDelete({ open: true, title: tournament?.title })} disabled={!tournament}>
-            Delete permanently
-          </button>
+          <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => setConfirmDelete({ open: true, title: tournament?.title })} disabled={!tournament}>Delete permanently</button>
         </div>
       </header>
 
-      {/* ── Stats row ── */}
+      {/* Stats row */}
       <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
         {[
           { label: 'Total teams', value: registrations.length, color: 'text-slate-50' },
           { label: 'Confirmed', value: confirmed.length, color: 'text-emerald-400' },
           { label: 'Pending', value: pending.length, color: 'text-amber-400' },
-          { label: 'Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}`, color: 'text-emerald-400' },
+          { label: 'Revenue', value: `\u20B9${totalRevenue.toLocaleString('en-IN')}`, color: 'text-emerald-400' },
         ].map((s) => (
           <div key={s.label} className="card text-center py-4">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide">{s.label}</p>
@@ -159,16 +194,16 @@ export function SingleTournamentDetailPage() {
         ))}
       </section>
 
-      {/* ── Overview & Prize ── */}
+      {/* Overview & Prize */}
       <section className="grid gap-3 md:grid-cols-2">
         <div className="card space-y-2 text-xs">
           <h2 className="text-sm font-semibold text-slate-100">Overview</h2>
           <div className="space-y-1.5 text-slate-300">
-            <p><span className="text-slate-500 w-28 inline-block">Format:</span>{tournament?.format_label || '—'}</p>
-            {tournament?.mode === 'br' && <p><span className="text-slate-500 w-28 inline-block">Map:</span>{tournament.map || '—'}</p>}
-            <p><span className="text-slate-500 w-28 inline-block">Entry fee:</span>{tournament?.entry_fee ? `₹${Number(tournament.entry_fee).toLocaleString()}` : 'Free'}</p>
-            <p><span className="text-slate-500 w-28 inline-block">Reg closes:</span>{tournament?.entry_closing_time ? new Date(tournament.entry_closing_time).toLocaleString('en-IN') : '—'}</p>
-            <p><span className="text-slate-500 w-28 inline-block">Match start:</span>{tournament?.start_time ? new Date(tournament.start_time).toLocaleString('en-IN') : '—'}</p>
+            <p><span className="text-slate-500 w-28 inline-block">Format:</span>{tournament?.format_label || '\u2014'}</p>
+            {tournament?.mode === 'br' && <p><span className="text-slate-500 w-28 inline-block">Map:</span>{tournament.map || '\u2014'}</p>}
+            <p><span className="text-slate-500 w-28 inline-block">Entry fee:</span>{tournament?.entry_fee ? `\u20B9${Number(tournament.entry_fee).toLocaleString()}` : 'Free'}</p>
+            <p><span className="text-slate-500 w-28 inline-block">Reg closes:</span>{tournament?.entry_closing_time ? new Date(tournament.entry_closing_time).toLocaleString('en-IN') : '\u2014'}</p>
+            <p><span className="text-slate-500 w-28 inline-block">Match start:</span>{tournament?.start_time ? new Date(tournament.start_time).toLocaleString('en-IN') : '\u2014'}</p>
           </div>
         </div>
         <div className="card space-y-2 text-xs">
@@ -183,17 +218,12 @@ export function SingleTournamentDetailPage() {
         </div>
       </section>
 
-      {/* ── Registered teams ── */}
+      {/* Registered teams */}
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-100">Registered teams</h2>
           <div className="flex gap-2 text-xs">
-            <input
-              className="input py-1 text-xs w-40"
-              placeholder="Search team / UID…"
-              value={regSearch}
-              onChange={(e) => setRegSearch(e.target.value)}
-            />
+            <input className="input py-1 text-xs w-40" placeholder="Search team / UID\u2026" value={regSearch} onChange={(e) => setRegSearch(e.target.value)} />
             <select className="input py-1 text-xs" value={regStatusFilter} onChange={(e) => setRegStatusFilter(e.target.value)}>
               <option value="all">All</option>
               <option value="confirmed">Confirmed</option>
@@ -203,7 +233,7 @@ export function SingleTournamentDetailPage() {
         </div>
         <div className="card overflow-x-auto text-xs">
           {loading ? (
-            <p className="text-xs text-slate-400">Loading…</p>
+            <p className="text-xs text-slate-400">Loading\u2026</p>
           ) : filteredRegs.length === 0 ? (
             <p className="text-xs text-slate-400 py-6 text-center">No registrations match.</p>
           ) : (
@@ -216,33 +246,53 @@ export function SingleTournamentDetailPage() {
                   <th>UID</th>
                   <th>Teammates</th>
                   <th>Status</th>
-                  <th>Order ID</th>
-                  <th>Payment ID</th>
                   <th>Registered</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRegs.map((r, idx) => {
                   const teammates = [r.teammate_uid_1, r.teammate_uid_2, r.teammate_uid_3].filter(Boolean);
+                  const busy = rowBusy[r.id];
                   return (
                     <tr key={r.id}>
                       <td className="text-slate-500">{idx + 1}</td>
                       <td>{r.team_name || 'Unnamed'}</td>
                       <td>
-                        <div>{r.players?.full_name || '—'}</div>
+                        <div>{r.players?.full_name || '\u2014'}</div>
                         {r.players?.phone && <div className="text-[10px] text-slate-500">{r.players.phone}</div>}
                       </td>
                       <td className="font-mono text-[11px]">{r.host_uid}</td>
-                      <td className="text-[10px] text-slate-400">{teammates.join(', ') || '—'}</td>
+                      <td className="text-[10px] text-slate-400">{teammates.join(', ') || '\u2014'}</td>
                       <td>
                         <span className={'status-pill ' + (r.status === 'confirmed' ? 'approved' : r.status === 'pending' ? 'pending' : '')}>
                           {r.status}
                         </span>
                       </td>
-                      <td className="font-mono text-[10px] text-sky-400">{r.razorpay_order_id || '—'}</td>
-                      <td className="font-mono text-[10px] text-emerald-400">{r.payment_id || '—'}</td>
                       <td className="whitespace-nowrap text-slate-400">
-                        {r.created_at ? new Date(r.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        {r.created_at ? new Date(r.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '\u2014'}
+                      </td>
+                      <td>
+                        <div className="flex gap-1.5">
+                          {r.status !== 'confirmed' && (
+                            <button
+                              disabled={!!busy}
+                              onClick={() => handleConfirm(r)}
+                              className="rounded px-2 py-1 text-[11px] font-semibold bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-700/40 transition-colors disabled:opacity-40"
+                            >
+                              {busy === 'confirming' ? '\u2026' : 'Confirm'}
+                            </button>
+                          )}
+                          {r.status !== 'pending' && (
+                            <button
+                              disabled={!!busy}
+                              onClick={() => handleReject(r)}
+                              className="rounded px-2 py-1 text-[11px] font-semibold bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-700/40 transition-colors disabled:opacity-40"
+                            >
+                              {busy === 'rejecting' ? '\u2026' : 'Reject'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -253,7 +303,6 @@ export function SingleTournamentDetailPage() {
         </div>
       </section>
 
-      {/* Edit form */}
       {tournament && (
         <TournamentForm
           open={formOpen}
@@ -265,7 +314,7 @@ export function SingleTournamentDetailPage() {
       )}
 
       <ConfirmDialog open={confirmArchive.open} title="Archive tournament?" description="Archived tournaments are hidden from lists but kept in the database." confirmLabel="Archive" onCancel={() => setConfirmArchive({ open: false })} onConfirm={handleArchiveConfirmed} />
-      <ConfirmDialog open={confirmDelete.open} title={`Delete "${confirmDelete.title}"?`} description="This will permanently delete the tournament and all registrations. Cannot be undone." confirmLabel="Delete permanently" onCancel={() => setConfirmDelete({ open: false })} onConfirm={handleDeleteConfirmed} />
+      <ConfirmDialog open={confirmDelete.open} title={`Delete \"${confirmDelete.title}\"?`} description="This will permanently delete the tournament and all registrations. Cannot be undone." confirmLabel="Delete permanently" onCancel={() => setConfirmDelete({ open: false })} onConfirm={handleDeleteConfirmed} />
     </div>
   );
 }

@@ -1,8 +1,12 @@
 import React from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import { Toast } from '../components/Toast';
 
 export function RoomCodesPage() {
+  const { gameId } = useParams();
+  const [searchParams] = useSearchParams();
+
   const [tournaments, setTournaments] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState('');
   const [existing, setExisting] = React.useState(null);
@@ -22,12 +26,22 @@ export function RoomCodesPage() {
         .from('tournaments')
         .select('id, title, mode, mode_label, format_label, start_time')
         .eq('is_archived', false)
+        .eq('game_id', gameId)
         .order('start_time', { ascending: true });
       if (error) console.error(error);
-      setTournaments(data || []);
+      const list = data || [];
+      setTournaments(list);
+
+      // Pre-select from URL param after list is loaded
+      const paramId = searchParams.get('tournamentId');
+      if (paramId && list.some((t) => String(t.id) === String(paramId))) {
+        setSelectedId(paramId);
+        loadRoomCode(paramId);
+      }
     }
     loadTournaments();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
 
   const loadRoomCode = async (tid) => {
     if (!tid) {
@@ -132,7 +146,7 @@ export function RoomCodesPage() {
       </header>
 
       <section className="card space-y-3 text-xs text-slate-200">
-        {/* Tournament selector */}
+        {/* Tournament selector — filtered to current game */}
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr),minmax(0,1.4fr)] md:items-end">
           <div>
             <label className="label" htmlFor="tournament">Tournament</label>
@@ -154,7 +168,7 @@ export function RoomCodesPage() {
             </select>
           </div>
           {selectedTournament && (
-            <div className="text-11px text-slate-500">
+            <div className="text-[11px] text-slate-500">
               <p>Match start: {selectedTournament.start_time ? new Date(selectedTournament.start_time).toLocaleString() : 'Not set'}</p>
               <p>Existing room code: {existing?.room_id ? `${existing.room_id} / ****` : 'None yet'}</p>
             </div>
@@ -194,14 +208,14 @@ export function RoomCodesPage() {
           </div>
         </form>
 
-        {/* Reveal / Hide toggle — only shown after a room code is saved */}
+        {/* Reveal / Hide toggle */}
         {existing?.id && (
           <div className="mt-2 flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-3">
             <div className="space-y-0.5">
               <p className="text-xs font-semibold text-slate-200">
-                {existing.is_revealed ? '👁 Room code is visible to hosts' : '🙈 Room code is hidden from hosts'}
+                {existing.is_revealed ? '\uD83D\uDC41 Room code is visible to hosts' : '\uD83D\uDE48 Room code is hidden from hosts'}
               </p>
-              <p className="text-11px text-slate-500">
+              <p className="text-[11px] text-slate-500">
                 {existing.is_revealed
                   ? 'Hosts can currently see the room ID and password. Click to hide.'
                   : 'Hosts cannot see the room details yet. Click to reveal when ready.'}
@@ -216,12 +230,12 @@ export function RoomCodesPage() {
                   : 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-700/40'
               }`}
             >
-              {toggling ? '…' : existing.is_revealed ? 'Hide' : 'Reveal'}
+              {toggling ? '\u2026' : existing.is_revealed ? 'Hide' : 'Reveal'}
             </button>
           </div>
         )}
 
-        <p className="text-11px text-slate-500">
+        <p className="text-[11px] text-slate-500">
           Room details are only shown to the <strong>host</strong> of each confirmed team.
           The host is responsible for sharing them with teammates.
         </p>
