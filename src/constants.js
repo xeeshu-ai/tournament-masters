@@ -7,12 +7,20 @@ export const FFMAPS = [
   'NeXTerra',
 ];
 
-export const BGMI_MAPS = [
+export const BGMI_BR_MAPS = [
   'Erangel',
   'Miramar',
+  'Rondo',
   'Sanhok',
   'Vikendi',
   'Livik',
+  'Nusa',
+  'Deston',
+];
+
+export const BGMI_TDM_MAPS = [
+  'Hangar',
+  'Warehouse',
 ];
 
 export const FFMODES = [
@@ -26,10 +34,14 @@ export const BGMI_MODES = [
   { id: 'tdm', label: 'TDM (Team Deathmatch)' },
 ];
 
-// Maps and modes per game — use these in pages that have access to gameId
+// Maps and modes per game
 export const MAPS_BY_GAME = {
   free_fire: FFMAPS,
-  bgmi: BGMI_MAPS,
+  bgmi: BGMI_BR_MAPS,
+};
+
+export const TDM_MAPS_BY_GAME = {
+  bgmi: BGMI_TDM_MAPS,
 };
 
 export const MODES_BY_GAME = {
@@ -37,7 +49,8 @@ export const MODES_BY_GAME = {
   bgmi: BGMI_MODES,
 };
 
-export function getMapsForGame(gameId) {
+export function getMapsForGame(gameId, mode) {
+  if (gameId === 'bgmi' && mode === 'tdm') return BGMI_TDM_MAPS;
   return MAPS_BY_GAME[gameId] ?? FFMAPS;
 }
 
@@ -50,17 +63,28 @@ export const TOURNAMENT_TYPES = [
   { id: 'long', label: 'Long Tournament' },
 ];
 
+// BR slot options — max teams per match
+// BGMI BR: 100 players per match → Solo=100 slots, Duo=50, Squad=25
+// FF BR: 48 players per match → Solo=48, Duo=24, Squad=12
 export const BR_SLOT_OPTIONS = {
-  solo: [20, 32, 48],
-  duo: [10, 16, 24],
-  squad: [5, 8, 12],
+  // Free Fire
+  ff_solo: [20, 32, 48],
+  ff_duo: [10, 16, 24],
+  ff_squad: [5, 8, 12],
+  // BGMI
+  bgmi_solo: [100],
+  bgmi_duo: [50],
+  bgmi_squad: [25],
+  // Generic fallback
+  solo: [20, 32, 48, 100],
+  duo: [10, 16, 24, 50],
+  squad: [5, 8, 12, 25],
 };
 
 // TDM slot options (BGMI): fixed 2 teams of 4
 export const TDM_ROUNDS = [5, 7, 11, 13];
 
-// Games registry — slugs MUST match the `id` column in the Supabase `games` table
-// and the public app's constants. Always use underscores (no hyphens).
+// Games registry
 export const GAMES = [
   {
     id: 'free_fire',
@@ -77,7 +101,7 @@ export const GAMES = [
     shortLabel: 'BG',
     description: 'Battle Royale · TDM',
     color: 'blue',
-    active: true,   // ✅ BGMI now active
+    active: true,
     uidLabel: 'Character ID',
   },
 ];
@@ -87,15 +111,24 @@ export function getGame(gameId) {
 }
 
 /**
- * Custom Free Fire BR scoring formula:
- *   Points = ((kills + 1) / position) * 100
+ * BGMI BR scoring (standard tournament formula):
+ *   Position points:  #1=15, #2=12, #3=10, #4=8, #5=6, #6-#10=4, #11-#15=2, else 0
+ *   Kill points: 1 per kill
+ *   Total = position_pts + kills
  *
- * Higher kills + lower position = more points.
- * Position defaults to 1 if not provided to avoid division by zero.
+ * Free Fire formula (legacy):
+ *   Points = ((kills + 1) / position) * 100
  */
-export function calculateBrPoints(kills, position) {
+export function calculateBrPoints(kills, position, gameId) {
   const k = Math.max(Number(kills || 0), 0);
   const p = Math.max(Number(position || 1), 1);
+
+  if (gameId === 'bgmi') {
+    const posTable = [15, 12, 10, 8, 6, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2];
+    const posPts = posTable[p - 1] ?? 0;
+    return posPts + k;
+  }
+  // Free Fire legacy formula
   return Math.round(((k + 1) / p) * 100);
 }
 
