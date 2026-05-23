@@ -5,12 +5,6 @@ import { TOURNAMENT_TYPES, calculateBrPoints, isPowerOfTwo } from '../constants'
 import { Toast } from '../components/Toast';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-function buildPlayerEntries(reg, uidToName) {
-  const all = [reg.host_uid, reg.teammate_uid_1, reg.teammate_uid_2, reg.teammate_uid_3].filter(Boolean);
-  return all.map((uid) => ({ uid, name: uidToName[uid] || uid }));
-}
-
 // ─── Registration status actions ────────────────────────────────────────────
 function RegistrationActions({ reg, onStatusChange }) {
   const [busy, setBusy] = React.useState(false);
@@ -80,7 +74,6 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
     setRows((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: val };
-      // auto-calc points
       const p = Number(field === 'position' ? val : next[idx].position);
       const k = Number(field === 'kills' ? val : next[idx].kills);
       const pts = calculateBrPoints ? calculateBrPoints(p, k) : 0;
@@ -309,7 +302,6 @@ function BracketPanel({ tournamentId }) {
     } else {
       setMatchesByRound({});
     }
-    // load team name map
     const { data: regs } = await supabaseAdmin.from('tournament_registrations').select('id, team_name').eq('tournament_id', tournamentId);
     const map = {};
     (regs || []).forEach((r) => { map[r.id] = r.team_name; });
@@ -509,12 +501,48 @@ export function TournamentDetailPage() {
     const { data: tData, error: tErr } = await supabaseAdmin.from('tournaments').select('*').eq('id', tournamentId).eq('game_id', gameId).maybeSingle();
     if (tErr) { notify('Failed to load tournament.', 'error'); setLoading(false); return; }
     setTournament(tData || null);
-    const { data: rData } = await supabaseAdmin
+
+    // ── Fetch registrations with members via registration_members join ──
+    const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
-      .select(`id, tournament_id, host_uid, team_name, status, created_at, razorpay_order_id, payment_id, slot_reserved_at, teammate_uid_1, teammate_uid_2, teammate_uid_3, players!host_player_id ( full_name, ff_uid, phone )`)
+      .select(`
+        id,
+        tournament_id,
+        host_uid,
+        team_name,
+        status,
+        created_at,
+        razorpay_order_id,
+        payment_id,
+        slot_reserved_at,
+        registration_members ( player_uid, role )
+      `)
       .eq('tournament_id', tournamentId)
       .order('created_at', { ascending: true });
-    setRegistrations(rData || []);
+
+    if (rErr) {
+      console.error('Registrations fetch error:', rErr);
+    }
+
+    // For each registration, also fetch the host player info from players table
+    const regs = rData || [];
+    const hostUids = [...new Set(regs.map((r) => r.host_uid).filter(Boolean))];
+    let hostMap = {};
+    if (hostUids.length > 0) {
+      const { data: playerRows } = await supabaseAdmin
+        .from('players')
+        .select('id, full_name, ff_uid, phone')
+        .in('id', hostUids);
+      (playerRows || []).forEach((p) => { hostMap[p.id] = p; });
+    }
+
+    const enriched = regs.map((r) => ({
+      ...r,
+      hostPlayer: hostMap[r.host_uid] || null,
+      teammates: (r.registration_members || []).filter((m) => m.role !== 'host'),
+    }));
+
+    setRegistrations(enriched);
     setLoading(false);
   }, [gameId, tournamentId]);
 
@@ -721,7 +749,7 @@ export function TournamentDetailPage() {
                       <th>#</th>
                       <th>Team</th>
                       <th>Host</th>
-                      <th>UID</th>
+                      <th>Host UID</th>
                       <th>Status</th>
                       <th>Order ID</th>
                       <th>Payment ID</th>
@@ -731,17 +759,21 @@ export function TournamentDetailPage() {
                   </thead>
                   <tbody>
                     {registrations.map((r, idx) => {
-                      const teammates = [r.teammate_uid_1, r.teammate_uid_2, r.teammate_uid_3].filter(Boolean);
+                      const teammateCount = (r.teammates || []).length;
                       return (
                         <tr key={r.id}>
                           <td className="text-slate-500">{idx + 1}</td>
                           <td>
                             <div>{r.team_name || 'Unnamed team'}</div>
-                            {teammates.length > 0 && <div className="text-[10px] text-slate-500">{teammates.length} teammate{teammates.length > 1 ? 's' : ''}</div>}
+                            {teammateCount > 0 && (
+                              <div className="text-[10px] text-slate-500">
+                                {teammateCount} teammate{teammateCount > 1 ? 's' : ''}
+                              </div>
+                            )}
                           </td>
                           <td>
-                            <div>{r.players?.full_name || '—'}</div>
-                            {r.players?.phone && <div className="text-[10px] text-slate-500">{r.players.phone}</div>}
+                            <div>{r.hostPlayer?.full_name || '—'}</div>
+                            {r.hostPlayer?.phone && <div className="text-[10px] text-slate-500">{r.hostPlayer.phone}</div>}
                           </td>
                           <td className="font-mono text-[11px]">{r.host_uid}</td>
                           <td>
