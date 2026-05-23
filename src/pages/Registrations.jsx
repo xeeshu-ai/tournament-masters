@@ -31,13 +31,9 @@ function StatusPill({ status }) {
 function TeamCard({ reg, idx, onRemove }) {
   const [open, setOpen] = React.useState(false);
 
-  const teammates = [
-    reg.teammate_uid_1 ? { uid: reg.teammate_uid_1 } : null,
-    reg.teammate_uid_2 ? { uid: reg.teammate_uid_2 } : null,
-    reg.teammate_uid_3 ? { uid: reg.teammate_uid_3 } : null,
-  ].filter(Boolean);
-
-  const totalMembers = 1 + teammates.length;
+  // members array comes from registration_members join
+  const members = (reg.members || []).sort((a, b) => a.slot - b.slot);
+  const totalMembers = members.length;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/60 text-xs overflow-hidden">
@@ -74,31 +70,28 @@ function TeamCard({ reg, idx, onRemove }) {
 
       {open && (
         <div className="border-t border-slate-800 px-3 py-2.5 space-y-2.5">
-          <div className="rounded-lg bg-slate-950/70 px-3 py-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 mb-1">Host (Member 1)</p>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-              {reg.host_name
-                ? <span className="text-slate-100 font-medium">{reg.host_name}</span>
-                : <span className="text-slate-500 italic">Name not linked</span>
-              }
-              <span className="font-mono text-sky-300 select-all">{reg.host_uid}</span>
-            </div>
-          </div>
 
-          {teammates.length > 0 ? (
+          {members.length === 0 ? (
+            <p className="text-[11px] text-slate-500 italic">No member data found.</p>
+          ) : (
             <div className="rounded-lg bg-slate-950/70 px-3 py-2 space-y-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Teammates ({teammates.length})
-              </p>
-              {teammates.map((m, i) => (
-                <div key={i} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                  <span className="text-slate-500 w-16 flex-shrink-0">Member {i + 2}:</span>
-                  <span className="font-mono text-slate-300 select-all">{m.uid}</span>
+              <div className="grid grid-cols-4 gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">
+                <span>Slot</span>
+                <span>In-Game Name</span>
+                <span>UID</span>
+                <span>Full Name</span>
+              </div>
+              {members.map((m) => (
+                <div key={m.slot} className="grid grid-cols-4 gap-2 items-center">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-900/40 text-[10px] font-bold text-sky-300">
+                    {m.slot}
+                  </span>
+                  <span className="text-slate-100 font-medium truncate">{m.in_game_name || '—'}</span>
+                  <span className="font-mono text-sky-300 select-all truncate">{m.game_uid || '—'}</span>
+                  <span className="text-slate-400 truncate">{m.full_name || '—'}</span>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-[11px] text-slate-600 italic">Solo registration — no teammates.</p>
           )}
 
           {(reg.razorpay_order_id || reg.payment_id) && (
@@ -175,8 +168,7 @@ function RemoveDialog({ reg, onCancel, onConfirm }) {
         <h2 className="text-sm font-semibold text-slate-50">Remove registration?</h2>
         <p className="text-xs text-slate-300">
           Remove <span className="font-semibold text-slate-50">{reg.team_name || 'this team'}</span>{' '}
-          (host UID: <span className="font-mono text-sky-300">{reg.host_uid}</span>) from the tournament?
-          The filled slots counter will update automatically.
+          from the tournament? The filled slots counter will update automatically.
         </p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary text-xs" onClick={onCancel}>Cancel</button>
@@ -195,7 +187,6 @@ function RemoveDialog({ reg, onCancel, onConfirm }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function RegistrationsPage() {
-  // ← scope all queries to the currently selected game
   const { gameId } = useParams();
 
   const [tournaments,      setTournaments]      = React.useState([]);
@@ -214,11 +205,11 @@ export function RegistrationsPage() {
   const load = React.useCallback(async () => {
     setLoading(true);
 
-    // 1. Tournaments — scoped to this game
+    // 1. Fetch tournaments for this game
     const { data: tData, error: tErr } = await supabaseAdmin
       .from('tournaments')
       .select('id, title, mode, format_label, start_time, registration_status, is_archived, filled_slots, max_slots')
-      .eq('game_id', gameId)                         // ← game filter
+      .eq('game_id', gameId)
       .order('start_time', { ascending: false });
 
     if (tErr) {
@@ -228,7 +219,6 @@ export function RegistrationsPage() {
       return;
     }
 
-    // 2. Registrations for these tournaments only
     const tournamentIds = (tData || []).map((t) => t.id);
 
     if (tournamentIds.length === 0) {
@@ -238,12 +228,28 @@ export function RegistrationsPage() {
       return;
     }
 
+    // 2. Fetch registrations with nested members + player name
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
-      .select(
-        'id, tournament_id, host_uid, team_name, status, created_at, teammate_uid_1, teammate_uid_2, teammate_uid_3, razorpay_order_id, payment_id'
-      )
-      .in('tournament_id', tournamentIds)            // ← scoped to this game's tournaments
+      .select(`
+        id,
+        tournament_id,
+        host_uid,
+        host_player_id,
+        team_name,
+        status,
+        created_at,
+        razorpay_order_id,
+        payment_id,
+        registration_members (
+          slot,
+          game_uid,
+          in_game_name,
+          player_id,
+          players ( full_name )
+        )
+      `)
+      .in('tournament_id', tournamentIds)
       .order('created_at', { ascending: true });
 
     if (rErr) {
@@ -255,31 +261,30 @@ export function RegistrationsPage() {
       return;
     }
 
-    // 3. Resolve host display names via game_profiles (game-scoped UIDs)
-    const hostUids = [...new Set((rData || []).map((r) => r.host_uid).filter(Boolean))];
-    let nameMap = {};
-
-    if (hostUids.length > 0) {
-      // game_profiles stores per-game UIDs; join via player_id → players.full_name
-      const { data: gpData, error: gpErr } = await supabaseAdmin
-        .from('game_profiles')
-        .select('game_uid, players(full_name)')
-        .eq('game_id', gameId)
-        .in('game_uid', hostUids);
-
-      if (gpErr) {
-        console.error('game_profiles name fetch error:', gpErr);
-      } else {
-        nameMap = Object.fromEntries(
-          (gpData || []).map((gp) => [gp.game_uid, gp.players?.full_name || null])
-        );
-      }
-    }
-
-    // 4. Group by tournament, attach host_name
+    // 3. Normalise each registration — flatten members with player name
     const grouped = {};
     for (const reg of rData || []) {
-      const row = { ...reg, host_name: nameMap[reg.host_uid] || null };
+      const members = (reg.registration_members || []).map((m) => ({
+        slot:         m.slot,
+        game_uid:     m.game_uid,
+        in_game_name: m.in_game_name,
+        player_id:    m.player_id,
+        full_name:    m.players?.full_name || null,
+      }));
+
+      const row = {
+        id:                 reg.id,
+        tournament_id:      reg.tournament_id,
+        host_uid:           reg.host_uid,
+        host_player_id:     reg.host_player_id,
+        team_name:          reg.team_name,
+        status:             reg.status,
+        created_at:         reg.created_at,
+        razorpay_order_id:  reg.razorpay_order_id,
+        payment_id:         reg.payment_id,
+        members,
+      };
+
       if (!grouped[reg.tournament_id]) grouped[reg.tournament_id] = [];
       grouped[reg.tournament_id].push(row);
     }
@@ -319,14 +324,15 @@ export function RegistrationsPage() {
       const q = search.toLowerCase();
       if (t.title.toLowerCase().includes(q)) return true;
       const regs = regsByTournament[t.id] || [];
-      return regs.some(
-        (r) =>
-          r.host_uid?.toLowerCase().includes(q) ||
-          r.team_name?.toLowerCase().includes(q) ||
-          r.host_name?.toLowerCase().includes(q) ||
-          r.teammate_uid_1?.toLowerCase().includes(q) ||
-          r.teammate_uid_2?.toLowerCase().includes(q) ||
-          r.teammate_uid_3?.toLowerCase().includes(q)
+      return regs.some((r) =>
+        r.host_uid?.toLowerCase().includes(q) ||
+        r.team_name?.toLowerCase().includes(q) ||
+        r.members?.some(
+          (m) =>
+            m.game_uid?.toLowerCase().includes(q) ||
+            m.in_game_name?.toLowerCase().includes(q) ||
+            m.full_name?.toLowerCase().includes(q)
+        )
       );
     });
 
