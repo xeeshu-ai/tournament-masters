@@ -24,6 +24,201 @@ function buildPlayerEntries(reg, uidToName) {
   }));
 }
 
+// ── BGMI TDM Result Entry ─────────────────────────────────────────────────────
+// First team to reach kill_target (40) wins. No rounds, no player K/D.
+function TdmResultEntry({ tournament, teams, onSaved }) {
+  const killTarget = Number(tournament.total_rounds) || 40;
+
+  const pairs = React.useMemo(() => {
+    const p = [];
+    for (let i = 0; i + 1 < teams.length; i += 2) {
+      p.push({ a: teams[i], b: teams[i + 1] });
+    }
+    return p;
+  }, [teams]);
+
+  const [matches, setMatches] = React.useState([]);
+  const [saving, setSaving] = React.useState(false);
+  const [toast, setToast] = React.useState(null);
+
+  const notify = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  React.useEffect(() => {
+    setMatches(pairs.map(() => ({ killsA: '', killsB: '', winner: '' })));
+  }, [pairs]);
+
+  function setKills(idx, side, val) {
+    const n = Math.min(Math.max(Number(val || 0), 0), killTarget);
+    setMatches((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [side === 'a' ? 'killsA' : 'killsB']: n };
+      return next;
+    });
+  }
+
+  function setWinner(idx, side) {
+    setMatches((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], winner: next[idx].winner === side ? '' : side };
+      return next;
+    });
+  }
+
+  async function handleSave() {
+    if (!pairs.length) { notify('No confirmed teams found.', 'error'); return; }
+    setSaving(true);
+
+    const payloadMatches = pairs.map((pair, i) => {
+      const m = matches[i] || {};
+      return {
+        team_a: { name: pair.a.team_name, kills: Number(m.killsA || 0) },
+        team_b: { name: pair.b.team_name, kills: Number(m.killsB || 0) },
+        winner_team:
+          m.winner === 'a' ? pair.a.team_name
+          : m.winner === 'b' ? pair.b.team_name
+          : null,
+      };
+    });
+
+    const firstWinner = payloadMatches.find((m) => m.winner_team)?.winner_team || null;
+
+    const { error } = await supabaseAdmin
+      .from('tournaments')
+      .update({
+        tdm_results: { kill_target: killTarget, matches: payloadMatches },
+        winner_text: firstWinner ? `Winner: ${firstWinner}` : null,
+      })
+      .eq('id', tournament.id);
+
+    setSaving(false);
+    if (error) { notify(`Failed to save: ${error.message}`, 'error'); return; }
+    notify('TDM results saved!');
+    if (onSaved) onSaved();
+  }
+
+  if (teams.length < 2) {
+    return (
+      <div className="card text-xs text-amber-400">
+        ⚠️ Need at least 2 confirmed teams to enter TDM results.
+      </div>
+    );
+  }
+
+  if (matches.length !== pairs.length) {
+    return (
+      <div className="card flex items-center gap-3 py-6 text-xs text-slate-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" />
+        <p>Loading match data…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {toast && (
+        <div className={`rounded-lg px-3 py-2 text-xs ${toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div className="rounded-lg bg-sky-500/10 border border-sky-700 px-4 py-2 text-xs text-sky-300 flex gap-6">
+        <span>Mode: <strong className="text-slate-100">TDM (Team Deathmatch)</strong></span>
+        <span>Kill target: <strong className="text-amber-300">{killTarget} kills</strong></span>
+        <span className="text-slate-400">First team to {killTarget} kills wins</span>
+      </div>
+
+      {pairs.map((pair, pairIdx) => {
+        const m = matches[pairIdx];
+        if (!m) return null;
+        return (
+          <div key={pairIdx} className="card space-y-4">
+            <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+              Match {pairIdx + 1}
+            </div>
+
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+              {/* Team A */}
+              <div className={`rounded-xl border p-3 space-y-3 transition-colors ${m.winner === 'a' ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'}`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-slate-100 truncate">{pair.a.team_name.toUpperCase()}</span>
+                  {m.winner === 'a' && <span className="ml-auto text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">Winner</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 whitespace-nowrap">Kills (max {killTarget}):</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={killTarget}
+                    value={m.killsA}
+                    onChange={(e) => setKills(pairIdx, 'a', e.target.value)}
+                    className="input w-20 text-xs text-center"
+                    placeholder="0"
+                  />
+                </div>
+                {Number(m.killsA) >= killTarget && (
+                  <p className="text-[11px] text-emerald-400 font-semibold">🏆 Reached kill target!</p>
+                )}
+              </div>
+
+              {/* VS + Winner buttons */}
+              <div className="flex flex-col items-center gap-3 pt-8">
+                <span className="text-slate-500 font-bold text-sm">VS</span>
+                <div className="space-y-1 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Winner</p>
+                  <button
+                    onClick={() => setWinner(pairIdx, 'a')}
+                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${m.winner === 'a' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                  >
+                    {pair.a.team_name.substring(0, 10)}
+                  </button>
+                  <button
+                    onClick={() => setWinner(pairIdx, 'b')}
+                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${m.winner === 'b' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                  >
+                    {pair.b.team_name.substring(0, 10)}
+                  </button>
+                </div>
+              </div>
+
+              {/* Team B */}
+              <div className={`rounded-xl border p-3 space-y-3 transition-colors ${m.winner === 'b' ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'}`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-slate-100 truncate">{pair.b.team_name.toUpperCase()}</span>
+                  {m.winner === 'b' && <span className="ml-auto text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">Winner</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 whitespace-nowrap">Kills (max {killTarget}):</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={killTarget}
+                    value={m.killsB}
+                    onChange={(e) => setKills(pairIdx, 'b', e.target.value)}
+                    className="input w-20 text-xs text-center"
+                    placeholder="0"
+                  />
+                </div>
+                {Number(m.killsB) >= killTarget && (
+                  <p className="text-[11px] text-emerald-400 font-semibold">🏆 Reached kill target!</p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <button className="btn-primary w-full" disabled={saving} onClick={handleSave}>
+        {saving ? 'Saving…' : 'Save TDM Results'}
+      </button>
+    </div>
+  );
+}
+
+// ── FF CS / LW Result Entry ───────────────────────────────────────────────────
+// Rounds won per team + per-player kills & deaths. FF-only.
 function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   const totalRounds = Number(tournament.total_rounds) || 13;
   const objectiveRounds = Math.ceil(totalRounds / 2) + 1;
@@ -84,14 +279,12 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
       const entriesA = buildPlayerEntries(pair.a, uidToName);
       const entriesB = buildPlayerEntries(pair.b, uidToName);
       const playersA = entriesA.map(({ uid, name }) => ({
-        name,
-        uid,
+        name, uid,
         kills: Number(md.players[uid]?.kills || 0),
         deaths: Number(md.players[uid]?.deaths || 0),
       }));
       const playersB = entriesB.map(({ uid, name }) => ({
-        name,
-        uid,
+        name, uid,
         kills: Number(md.players[uid]?.kills || 0),
         deaths: Number(md.players[uid]?.deaths || 0),
       }));
@@ -113,10 +306,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
       .eq('id', tournament.id);
 
     setSaving(false);
-    if (error) {
-      notify(`Failed to save: ${error.message}`, 'error');
-      return;
-    }
+    if (error) { notify(`Failed to save: ${error.message}`, 'error'); return; }
     notify('Results saved!');
     if (onSaved) onSaved();
   }
@@ -132,7 +322,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   if (teams.length < 2) {
     return (
       <div className="card text-xs text-amber-400">
-        \u26A0\uFE0F Only 1 confirmed team found. Need at least 2 teams to enter CS/LW results.
+        ⚠️ Only 1 confirmed team found. Need at least 2 teams to enter CS/LW results.
       </div>
     );
   }
@@ -141,7 +331,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
     return (
       <div className="card flex items-center gap-3 py-6 text-xs text-slate-400">
         <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-sky-400" />
-        <p>Loading match data\u2026</p>
+        <p>Loading match data…</p>
       </div>
     );
   }
@@ -149,9 +339,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   return (
     <div className="space-y-6">
       {toast && (
-        <div className={`rounded-lg px-3 py-2 text-xs ${
-          toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
-        }`}>
+        <div className={`rounded-lg px-3 py-2 text-xs ${toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
           {toast.msg}
         </div>
       )}
@@ -186,17 +374,13 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Winner</p>
                   <button
                     onClick={() => setWinner(pairIdx, md.winner === 'a' ? '' : 'a')}
-                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${
-                      md.winner === 'a' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
+                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${md.winner === 'a' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
                   >
                     {pair.a.team_name.substring(0, 10)}
                   </button>
                   <button
                     onClick={() => setWinner(pairIdx, md.winner === 'b' ? '' : 'b')}
-                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${
-                      md.winner === 'b' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
+                    className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${md.winner === 'b' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
                   >
                     {pair.b.team_name.substring(0, 10)}
                   </button>
@@ -217,7 +401,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
       })}
 
       <button className="btn-primary w-full" disabled={saving} onClick={handleSave}>
-        {saving ? 'Saving\u2026' : 'Save CS/LW Results'}
+        {saving ? 'Saving…' : 'Save CS/LW Results'}
       </button>
     </div>
   );
@@ -225,9 +409,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
 
 function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, onStatChange, isWinner }) {
   return (
-    <div className={`rounded-xl border p-3 space-y-3 transition-colors ${
-      isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'
-    }`}>
+    <div className={`rounded-xl border p-3 space-y-3 transition-colors ${isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'}`}>
       <div className="flex items-center gap-2">
         <div className="w-5 h-5 rounded bg-slate-700 border border-slate-600 flex-shrink-0" />
         <span className="font-bold text-sm text-slate-100 truncate">{team.team_name.toUpperCase()}</span>
@@ -255,15 +437,11 @@ function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, o
   );
 }
 
-/**
- * BR result entry — saves directly to tournaments.single_br_results (JSONB).
- * This removes the dependency on long_brackets / long_br_matches / long_br_match_scores
- * for single-match tournaments, which never have bracket rows.
- */
+// ── BR Result Entry ───────────────────────────────────────────────────────────
 function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, onSaveBr, saving, winnerText, setWinnerText }) {
   return (
     <div className="space-y-4">
-      <h2 className="text-sm font-semibold text-slate-100">Single Match \u00B7 Battle Royale</h2>
+      <h2 className="text-sm font-semibold text-slate-100">Single Match · Battle Royale</h2>
       <div className="card overflow-x-auto text-xs">
         {teams.length === 0 ? (
           <p className="text-xs text-slate-400">No confirmed teams registered.</p>
@@ -311,7 +489,7 @@ function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, on
         <textarea rows={3} className="input resize-none" value={winnerText} onChange={(e) => setWinnerText(e.target.value)} />
         <div className="flex justify-end">
           <button className="btn-primary" disabled={saving} onClick={onSaveBr}>
-            {saving ? 'Saving\u2026' : 'Save BR Results'}
+            {saving ? 'Saving…' : 'Save BR Results'}
           </button>
         </div>
       </div>
@@ -319,6 +497,7 @@ function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, on
   );
 }
 
+// ── End Tournament ────────────────────────────────────────────────────────────
 function EndTournamentSection({ tournament, onEnded }) {
   const [confirm, setConfirm] = React.useState(false);
   const [ending, setEnding] = React.useState(false);
@@ -346,9 +525,7 @@ function EndTournamentSection({ tournament, onEnded }) {
   return (
     <div className="card space-y-3 border border-red-900/40 bg-red-500/5">
       {toast && (
-        <div className={`rounded-lg px-3 py-2 text-xs ${
-          toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
-        }`}>
+        <div className={`rounded-lg px-3 py-2 text-xs ${toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
           {toast.msg}
         </div>
       )}
@@ -357,7 +534,7 @@ function EndTournamentSection({ tournament, onEnded }) {
           <p className="text-sm font-semibold text-red-400">End Tournament</p>
           <p className="text-[11px] text-slate-400 mt-0.5">
             {isEnded
-              ? '\u2705 This tournament has ended. Players can see results.'
+              ? '✅ This tournament has ended. Players can see results.'
               : 'Once ended, players will see the tournament as concluded and view final results.'}
           </p>
         </div>
@@ -375,10 +552,10 @@ function EndTournamentSection({ tournament, onEnded }) {
       </div>
       {confirm && !isEnded && (
         <div className="rounded-lg bg-red-500/10 border border-red-700 p-3 space-y-2">
-          <p className="text-xs text-red-300 font-semibold">\u26A0\uFE0F Are you sure? This will close registrations and show results to all players.</p>
+          <p className="text-xs text-red-300 font-semibold">⚠️ Are you sure? This will close registrations and show results to all players.</p>
           <div className="flex gap-2">
             <button onClick={handleEnd} disabled={ending} className="btn-primary bg-red-600 hover:bg-red-500 text-xs">
-              {ending ? 'Ending\u2026' : 'Yes, End Tournament'}
+              {ending ? 'Ending…' : 'Yes, End Tournament'}
             </button>
             <button onClick={() => setConfirm(false)} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">Cancel</button>
           </div>
@@ -388,6 +565,7 @@ function EndTournamentSection({ tournament, onEnded }) {
   );
 }
 
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export function ResultsPage() {
   const { gameId } = useParams();
   const [searchParams] = useSearchParams();
@@ -413,7 +591,7 @@ export function ResultsPage() {
   async function loadTournaments() {
     const { data, error } = await supabaseAdmin
       .from('tournaments')
-      .select('id, title, type, mode, total_rounds, status, team_size')
+      .select('id, title, type, mode, total_rounds, status, team_size, game_id')
       .eq('is_archived', false)
       .eq('game_id', gameId)
       .order('start_time', { ascending: false });
@@ -480,7 +658,8 @@ export function ResultsPage() {
     setBrRows((rows) => {
       const next = [...rows];
       const row = { ...next[index], [field]: value };
-      row.points = calculateBrPoints(row.kills, row.position);
+      // Pass gameId so BGMI uses position-point table, FF uses legacy formula
+      row.points = calculateBrPoints(row.kills, row.position, gameId);
       next[index] = row;
       return next;
     });
@@ -497,11 +676,6 @@ export function ResultsPage() {
     if (rows.length) await supabaseAdmin.from('notifications').insert(rows);
   };
 
-  /**
-   * BR save — writes directly to tournaments.single_br_results (JSONB).
-   * No dependency on long_brackets / long_br_matches / long_br_match_scores.
-   * Public app reads from this column to display results.
-   */
   const handleSaveBr = async () => {
     if (!selected) return;
     setStatus('saving');
@@ -518,7 +692,6 @@ export function ResultsPage() {
       };
     });
 
-    // Sort by points descending for stored order
     const sorted = [...scores].sort((a, b) => b.points - a.points);
 
     const { error } = await supabaseAdmin
@@ -544,10 +717,14 @@ export function ResultsPage() {
     setStatus('idle');
   };
 
+  // ── Mode flags ──────────────────────────────────────────────────────────────
+  // BGMI TDM → TdmResultEntry (kills to 40, team-level only)
+  // FF CS / LW → CsLwResultEntry (rounds + per-player K/D)
+  // BR (any game) → BrResultEntry (kills + position → points)
   const isSingleBR = selected && selected.type === 'single' && selected.mode === 'br';
-  const isCSorLW = selected && selected.mode !== 'br';
+  const isBgmiTDM  = selected && selected.mode === 'tdm' && selected.game_id === 'bgmi';
+  const isCSorLW   = selected && (selected.mode === 'cs' || selected.mode === 'lw');
 
-  // Back nav: if came from single tournament detail, go back there; else go to long tournament detail
   const handleBackToTournament = () => {
     if (!sourceTournamentId) return;
     const sourceT = tournaments.find((t) => String(t.id) === String(sourceTournamentId));
@@ -587,10 +764,10 @@ export function ResultsPage() {
             value={selected?.id || ''}
             onChange={(e) => handleSelectTournament(e.target.value)}
           >
-            <option value="">Select tournament\u2026</option>
+            <option value="">Select tournament…</option>
             {tournaments.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.title} \u00B7 {t.type} \u00B7 {t.mode?.toUpperCase()}{t.status === 'ended' ? ' [ENDED]' : ''}
+                {t.title} · {t.type} · {t.mode?.toUpperCase()}{t.status === 'ended' ? ' [ENDED]' : ''}
               </option>
             ))}
           </select>
@@ -600,14 +777,27 @@ export function ResultsPage() {
       {fromTournament && selected && (
         <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-xs text-slate-300">
           Tournament: <span className="font-semibold text-slate-100">{selected.title}</span>
-          <span className="ml-2 text-slate-500">\u00B7 {selected.mode?.toUpperCase()} \u00B7 {selected.type}</span>
+          <span className="ml-2 text-slate-500">· {selected.mode?.toUpperCase()} · {selected.type}</span>
         </div>
       )}
 
+      {/* BGMI TDM: kill-based result entry */}
+      {selected && isBgmiTDM && (
+        <section className="space-y-4">
+          <h2 className="text-sm font-semibold text-slate-100">🎯 BGMI TDM · Result Entry</h2>
+          <TdmResultEntry
+            tournament={selected}
+            teams={teams}
+            onSaved={() => { notify('TDM results saved!'); loadTeams(selected.id); }}
+          />
+        </section>
+      )}
+
+      {/* FF CS / LW: rounds + per-player K/D */}
       {selected && isCSorLW && (
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-slate-100">
-            {selected.mode === 'cs' ? '\u2694\uFE0F Clash Squad' : '\uD83D\uDC3A Lone Wolf'} \u00B7 Result Entry
+            {selected.mode === 'cs' ? '⚔️ Clash Squad' : '🐺 Lone Wolf'} · Result Entry
           </h2>
           <CsLwResultEntry
             tournament={selected}
@@ -618,6 +808,7 @@ export function ResultsPage() {
         </section>
       )}
 
+      {/* BR (FF + BGMI): kills + position → points */}
       {selected && isSingleBR && (
         <section>
           <BrResultEntry
