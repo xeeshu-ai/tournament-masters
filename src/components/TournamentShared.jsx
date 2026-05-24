@@ -2,6 +2,7 @@ import React from 'react';
 import { supabaseAdmin } from '../supabaseClient';
 import {
   TDM_ROUNDS,
+  BGMI_TDM_KILL_TARGET,
   getMapsForGame,
   getModesForGame,
 } from '../constants';
@@ -93,6 +94,8 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           updated.format_label = '4v4';
           updated.max_slots = 2;
           updated.team_size = 4;
+          // BGMI TDM kill target is always 40 — auto-fill
+          if (isBgmi) updated.total_rounds = BGMI_TDM_KILL_TARGET;
         } else if (value === 'br') {
           if (isBgmi) {
             updated.players_per_match = BGMI_BR_PLAYERS;
@@ -180,6 +183,7 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
       is_archived: false,
       team_size: Number(form.team_size) || 1,
       players_per_match: ppm,
+      // For BGMI TDM: total_rounds stores the kill target (40). For CS/LW: stores actual rounds.
       total_rounds: isCS || isLW || isTDM ? Number(form.total_rounds) || null : null,
     };
     let result;
@@ -312,15 +316,31 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
             {/* TDM specific */}
             {isTDM && (
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Total rounds</label>
-                  <select name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
-                    <option value="">Select…</option>
-                    {TDM_ROUNDS.map((r) => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* BGMI TDM: fixed kill target = 40; FF TDM (future): rounds dropdown */}
+                {isBgmi ? (
+                  <div>
+                    <label className="label">Kill target (fixed)</label>
+                    <input
+                      name="total_rounds"
+                      type="number"
+                      className="input bg-slate-800/50 cursor-not-allowed"
+                      value={BGMI_TDM_KILL_TARGET}
+                      readOnly
+                      tabIndex={-1}
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">BGMI TDM: first team to 40 kills wins</p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="label">Total rounds</label>
+                    <select name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
+                      <option value="">Select…</option>
+                      {TDM_ROUNDS.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="label">Map</label>
                   <select name="map" className="input" value={form.map} onChange={handleChange}>
@@ -445,6 +465,5 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   );
 }
 
-const FF_BR_PLAYERS_PER_MATCH = [20, 32, 48];
-const CS_ROUNDS = [5, 7, 11, 13];
-const LW_ROUNDS = [9, 11, 13];
+// Re-export these so pages that import from here still work
+export { SingleTournamentRow, ArchivedSection } from './TournamentShared.parts';
