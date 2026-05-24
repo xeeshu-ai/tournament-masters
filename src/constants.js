@@ -81,8 +81,9 @@ export const BR_SLOT_OPTIONS = {
   squad: [5, 8, 12, 25],
 };
 
-// TDM slot options (BGMI): fixed 2 teams of 4
+// TDM slot options / settings
 export const TDM_ROUNDS = [5, 7, 11, 13];
+export const BGMI_TDM_KILL_TARGET = 40;
 
 // Games registry
 export const GAMES = [
