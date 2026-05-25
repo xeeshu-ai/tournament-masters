@@ -503,19 +503,22 @@ export function TournamentDetailPage() {
     setTournament(tData || null);
 
     // ── Fetch registrations with members via registration_members join ──
+    // FIX: Use correct columns (game_uid, in_game_name, slot) not (player_uid, role)
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
       .select(`
         id,
         tournament_id,
         host_uid,
+        host_player_id,
         team_name,
+        team_members_summary,
         status,
         created_at,
         razorpay_order_id,
         payment_id,
         slot_reserved_at,
-        registration_members ( player_uid, role )
+        registration_members ( slot, game_uid, in_game_name, player_id )
       `)
       .eq('tournament_id', tournamentId)
       .order('created_at', { ascending: true });
@@ -524,22 +527,26 @@ export function TournamentDetailPage() {
       console.error('Registrations fetch error:', rErr);
     }
 
-    // For each registration, also fetch the host player info from players table
     const regs = rData || [];
-    const hostUids = [...new Set(regs.map((r) => r.host_uid).filter(Boolean))];
+
+    // FIX: Look up host player by host_player_id (UUID), not host_uid (which is a game UID string like "BGMI-Zeeshan001")
+    const hostPlayerIds = [...new Set(regs.map((r) => r.host_player_id).filter(Boolean))];
     let hostMap = {};
-    if (hostUids.length > 0) {
+    if (hostPlayerIds.length > 0) {
       const { data: playerRows } = await supabaseAdmin
         .from('players')
-        .select('id, full_name, ff_uid, phone')
-        .in('id', hostUids);
+        .select('id, full_name, phone')
+        .in('id', hostPlayerIds);
       (playerRows || []).forEach((p) => { hostMap[p.id] = p; });
     }
 
     const enriched = regs.map((r) => ({
       ...r,
-      hostPlayer: hostMap[r.host_uid] || null,
-      teammates: (r.registration_members || []).filter((m) => m.role !== 'host'),
+      hostPlayer: hostMap[r.host_player_id] || null,
+      // Slot 0 = host, slots 1+ = teammates
+      teammates: (r.registration_members || [])
+        .sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0))
+        .filter((m) => (m.slot ?? 0) > 0),
     }));
 
     setRegistrations(enriched);
@@ -706,6 +713,9 @@ export function TournamentDetailPage() {
                     <p><span className="text-slate-500">Limited ammo:</span> {tournament.limited_ammo ? 'Yes' : 'No'}</p>
                   </>
                 )}
+                {tournament?.mode === 'tdm' && (
+                  <p><span className="text-slate-500">Kill target:</span> 40 kills per side</p>
+                )}
                 <p><span className="text-slate-500">Entry fee:</span> {tournament?.entry_fee ? `₹${Number(tournament.entry_fee).toLocaleString()}` : 'Free'}</p>
                 <p><span className="text-slate-500">Entry closing:</span> {tournament?.entry_closing_time ? new Date(tournament.entry_closing_time).toLocaleString('en-IN') : '—'}</p>
                 <p><span className="text-slate-500">Match start:</span> {tournament?.start_time ? new Date(tournament.start_time).toLocaleString('en-IN') : '—'}</p>
@@ -748,6 +758,7 @@ export function TournamentDetailPage() {
                     <tr>
                       <th>#</th>
                       <th>Team</th>
+                      <th>Members</th>
                       <th>Host</th>
                       <th>Host UID</th>
                       <th>Status</th>
@@ -759,16 +770,26 @@ export function TournamentDetailPage() {
                   </thead>
                   <tbody>
                     {registrations.map((r, idx) => {
-                      const teammateCount = (r.teammates || []).length;
+                      const allMembers = (r.registration_members || []).sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
                       return (
                         <tr key={r.id}>
                           <td className="text-slate-500">{idx + 1}</td>
                           <td>
-                            <div>{r.team_name || 'Unnamed team'}</div>
-                            {teammateCount > 0 && (
-                              <div className="text-[10px] text-slate-500">
-                                {teammateCount} teammate{teammateCount > 1 ? 's' : ''}
+                            <div className="font-medium">{r.team_name || 'Unnamed team'}</div>
+                          </td>
+                          <td>
+                            {allMembers.length > 0 ? (
+                              <div className="space-y-0.5">
+                                {allMembers.map((m) => (
+                                  <div key={m.slot} className="text-[10px] text-slate-300">
+                                    <span className="text-slate-500">#{m.slot}</span> {m.in_game_name || m.game_uid}
+                                  </div>
+                                ))}
                               </div>
+                            ) : (
+                              <span className="text-slate-500 text-[10px]">
+                                {r.team_members_summary || '—'}
+                              </span>
                             )}
                           </td>
                           <td>
