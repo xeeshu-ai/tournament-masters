@@ -17,7 +17,15 @@ const BR_TEAM_SIZES = [
   { value: 4, label: 'Squad (4 players)' },
 ];
 
-const BR_PLAYERS_PER_MATCH = [20, 32, 48];
+function getBrPlayersPerMatchOptions(gameId) {
+  if (gameId === 'bgmi') {
+    // BGMI BR: 100 players per match
+    return [100];
+  }
+  // Free Fire BR: typical 20/32/48 lobbies
+  return [20, 32, 48];
+}
+
 const CS_ROUNDS = [5, 7, 11, 13];
 const LW_ROUNDS = [9, 11, 13];
 
@@ -54,6 +62,7 @@ const emptyForm = {
 function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   const MAPS = getMapsForGame(gameId);
   const MODES = getModesForGame(gameId);
+  const BR_PLAYERS_PER_MATCH = getBrPlayersPerMatchOptions(gameId);
 
   const [form, setForm] = React.useState(initial || emptyForm);
   const [saving, setSaving] = React.useState(false);
@@ -119,9 +128,16 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
       if (!form.players_per_match) return 'Select players per match for BR.';
       if (!form.team_size) return 'Select team size for BR.';
       const maxSlots = Number(form.max_slots || 0);
-      const teamKey = Number(form.team_size) === 1 ? 'solo' : Number(form.team_size) === 2 ? 'duo' : 'squad';
-      if (!BR_SLOT_OPTIONS[teamKey].includes(maxSlots)) {
-        return `BR ${teamKey} max slots must be ${BR_SLOT_OPTIONS[teamKey].join(', ')}.`;
+      const baseKey =
+        Number(form.team_size) === 1 ? 'solo' :
+        Number(form.team_size) === 2 ? 'duo'  : 'squad';
+      const specificKey =
+        gameId === 'bgmi' ? `bgmi_${baseKey}` :
+        gameId === 'free_fire' ? `ff_${baseKey}` :
+        baseKey;
+      const allowed = BR_SLOT_OPTIONS[specificKey] ?? BR_SLOT_OPTIONS[baseKey] ?? [];
+      if (!allowed.includes(maxSlots)) {
+        return `BR ${baseKey} max slots must be ${allowed.join(', ')}.`;
       }
     }
     return '';

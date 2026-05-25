@@ -1,7 +1,7 @@
 import React from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
-import { calculateBrPoints } from '../constants';
+import { calculateBrPoints, BGMI_TDM_KILL_TARGET } from '../constants';
 import { Toast } from '../components/Toast';
 
 function teammateCount(teamSize) {
@@ -27,7 +27,7 @@ function buildPlayerEntries(reg, uidToName) {
 // ── BGMI TDM Result Entry ─────────────────────────────────────────────────────
 // First team to reach kill_target (40) wins. No rounds, no player K/D.
 function TdmResultEntry({ tournament, teams, onSaved }) {
-  const killTarget = Number(tournament.total_rounds) || 40;
+  const killTarget = BGMI_TDM_KILL_TARGET;
 
   const pairs = React.useMemo(() => {
     const p = [];
