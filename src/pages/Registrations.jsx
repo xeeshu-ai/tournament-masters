@@ -12,17 +12,13 @@ function fmtDate(str) {
 }
 
 function StatusPill({ status }) {
-  const map = {
-    confirmed: 'bg-emerald-900/50 text-emerald-300',
-    pending:   'bg-amber-900/50  text-amber-300',
-    rejected:  'bg-red-900/50    text-red-400',
-    expired:   'bg-slate-800     text-slate-400',
-  };
+  // Only two meaningful states now: joined (paid) or removed (rejected)
+  const isRemoved = status === 'rejected';
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-      map[status] || 'bg-slate-800 text-slate-400'
+      isRemoved ? 'bg-red-900/50 text-red-400' : 'bg-emerald-900/50 text-emerald-300'
     }`}>
-      {status || 'unknown'}
+      {isRemoved ? 'removed' : 'joined'}
     </span>
   );
 }
@@ -31,12 +27,12 @@ function StatusPill({ status }) {
 function TeamCard({ reg, idx, onRemove }) {
   const [open, setOpen] = React.useState(false);
 
-  // members array comes from registration_members join
   const members = (reg.members || []).sort((a, b) => a.slot - b.slot);
   const totalMembers = members.length;
+  const isRemoved = reg.status === 'rejected';
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 text-xs overflow-hidden">
+    <div className={`rounded-xl border border-slate-800 bg-slate-900/60 text-xs overflow-hidden ${isRemoved ? 'opacity-50' : ''}`}>
       <button
         type="button"
         className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-800/40 transition-colors"
@@ -53,11 +49,15 @@ function TeamCard({ reg, idx, onRemove }) {
           <StatusPill status={reg.status} />
           <button
             type="button"
-            className="rounded px-2 py-0.5 text-[11px] bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
+            className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+              isRemoved
+                ? 'bg-emerald-900/40 text-emerald-400 hover:bg-emerald-800/60'
+                : 'bg-red-900/40 text-red-400 hover:bg-red-800/60'
+            }`}
             onClick={(e) => { e.stopPropagation(); onRemove(reg); }}
-            title="Remove registration"
+            title={isRemoved ? 'Restore' : 'Remove'}
           >
-            Remove
+            {isRemoved ? 'Restore' : 'Remove'}
           </button>
           <svg
             className={`h-3.5 w-3.5 text-slate-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -70,7 +70,6 @@ function TeamCard({ reg, idx, onRemove }) {
 
       {open && (
         <div className="border-t border-slate-800 px-3 py-2.5 space-y-2.5">
-
           {members.length === 0 ? (
             <p className="text-[11px] text-slate-500 italic">No member data found.</p>
           ) : (
@@ -110,10 +109,11 @@ function TeamCard({ reg, idx, onRemove }) {
 }
 
 // ─── Tournament Section (collapsible) ────────────────────────────────────────
-function TournamentSection({ tournament, registrations, onRemove }) {
+function TournamentSection({ tournament, registrations, onToggle }) {
   const [open, setOpen] = React.useState(true);
-  const total     = registrations.length;
-  const confirmed = registrations.filter((r) => r.status === 'confirmed').length;
+  const total   = registrations.length;
+  const joined  = registrations.filter((r) => r.status !== 'rejected').length;
+  const removed = registrations.filter((r) => r.status === 'rejected').length;
 
   return (
     <div className="card space-y-0">
@@ -127,9 +127,14 @@ function TournamentSection({ tournament, registrations, onRemove }) {
           <span className="text-[11px] text-slate-400">
             {tournament.mode?.toUpperCase()} · {tournament.format_label}
           </span>
-          <span className="rounded-full bg-sky-900/50 px-2 py-0.5 text-[11px] font-semibold text-sky-300">
-            {confirmed}/{total} confirmed
+          <span className="rounded-full bg-emerald-900/50 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+            {joined} joined
           </span>
+          {removed > 0 && (
+            <span className="rounded-full bg-red-900/40 px-2 py-0.5 text-[11px] font-semibold text-red-400">
+              {removed} removed
+            </span>
+          )}
           {tournament.start_time && (
             <span className="text-[11px] text-slate-500">{fmtDate(tournament.start_time)}</span>
           )}
@@ -150,37 +155,11 @@ function TournamentSection({ tournament, registrations, onRemove }) {
             <p className="text-[11px] text-slate-500">No registrations yet for this tournament.</p>
           ) : (
             registrations.map((reg, i) => (
-              <TeamCard key={reg.id} reg={reg} idx={i} onRemove={onRemove} />
+              <TeamCard key={reg.id} reg={reg} idx={i} onRemove={onToggle} />
             ))
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── Remove dialog ────────────────────────────────────────────────────────────
-function RemoveDialog({ reg, onCancel, onConfirm }) {
-  if (!reg) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="card w-full max-w-sm space-y-4">
-        <h2 className="text-sm font-semibold text-slate-50">Remove registration?</h2>
-        <p className="text-xs text-slate-300">
-          Remove <span className="font-semibold text-slate-50">{reg.team_name || 'this team'}</span>{' '}
-          from the tournament? The filled slots counter will update automatically.
-        </p>
-        <div className="flex justify-end gap-2">
-          <button type="button" className="btn-secondary text-xs" onClick={onCancel}>Cancel</button>
-          <button
-            type="button"
-            className="text-xs rounded px-3 py-1.5 bg-red-700 text-white hover:bg-red-600 transition-colors"
-            onClick={onConfirm}
-          >
-            Remove
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -193,7 +172,6 @@ export function RegistrationsPage() {
   const [regsByTournament, setRegsByTournament] = React.useState({});
   const [loading,          setLoading]          = React.useState(true);
   const [search,           setSearch]           = React.useState('');
-  const [removeTarget,     setRemoveTarget]     = React.useState(null);
   const [toast,            setToast]            = React.useState(null);
   const [filter,           setFilter]           = React.useState('active');
 
@@ -205,7 +183,6 @@ export function RegistrationsPage() {
   const load = React.useCallback(async () => {
     setLoading(true);
 
-    // 1. Fetch tournaments for this game
     const { data: tData, error: tErr } = await supabaseAdmin
       .from('tournaments')
       .select('id, title, mode, format_label, start_time, registration_status, is_archived, filled_slots, max_slots')
@@ -228,7 +205,6 @@ export function RegistrationsPage() {
       return;
     }
 
-    // 2. Fetch registrations with nested members + player name
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
       .select(`
@@ -261,7 +237,6 @@ export function RegistrationsPage() {
       return;
     }
 
-    // 3. Normalise each registration — flatten members with player name
     const grouped = {};
     for (const reg of rData || []) {
       const members = (reg.registration_members || []).map((m) => ({
@@ -273,15 +248,15 @@ export function RegistrationsPage() {
       }));
 
       const row = {
-        id:                 reg.id,
-        tournament_id:      reg.tournament_id,
-        host_uid:           reg.host_uid,
-        host_player_id:     reg.host_player_id,
-        team_name:          reg.team_name,
-        status:             reg.status,
-        created_at:         reg.created_at,
-        razorpay_order_id:  reg.razorpay_order_id,
-        payment_id:         reg.payment_id,
+        id:                reg.id,
+        tournament_id:     reg.tournament_id,
+        host_uid:          reg.host_uid,
+        host_player_id:    reg.host_player_id,
+        team_name:         reg.team_name,
+        status:            reg.status,
+        created_at:        reg.created_at,
+        razorpay_order_id: reg.razorpay_order_id,
+        payment_id:        reg.payment_id,
         members,
       };
 
@@ -296,24 +271,21 @@ export function RegistrationsPage() {
 
   React.useEffect(() => { load(); }, [load]);
 
-  const handleRemoveConfirmed = async () => {
-    const reg = removeTarget;
-    if (!reg) return;
-
+  // Toggle registration: remove (→ rejected) or restore (→ confirmed)
+  const handleToggleRegistration = async (reg) => {
+    const newStatus = reg.status === 'rejected' ? 'confirmed' : 'rejected';
     const { error } = await supabaseAdmin
       .from('tournament_registrations')
-      .delete()
+      .update({ status: newStatus })
       .eq('id', reg.id);
 
     if (error) {
       console.error(error);
-      notify('Failed to remove registration.', 'error');
-      setRemoveTarget(null);
+      notify('Failed to update registration.', 'error');
       return;
     }
 
-    notify('Registration removed.');
-    setRemoveTarget(null);
+    notify(newStatus === 'rejected' ? 'Registration removed.' : 'Registration restored.');
     load();
   };
 
@@ -336,28 +308,24 @@ export function RegistrationsPage() {
       );
     });
 
-  const totalRegs     = Object.values(regsByTournament).reduce((s, a) => s + a.length, 0);
-  const confirmedRegs = Object.values(regsByTournament).flat().filter((r) => r.status === 'confirmed').length;
+  const allRegs    = Object.values(regsByTournament).flat();
+  const totalJoined = allRegs.filter((r) => r.status !== 'rejected').length;
 
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-50">Registrations</h1>
-          <p className="text-xs text-slate-400">View all registered teams and player UIDs per tournament.</p>
+          <p className="text-xs text-slate-400">Payment done = joined. No manual confirmation needed.</p>
         </div>
         <div className="flex flex-wrap gap-3 text-[11px]">
           <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-center min-w-[70px]">
-            <p className="text-lg font-bold text-slate-50 tabular-nums">{totalRegs}</p>
+            <p className="text-lg font-bold text-slate-50 tabular-nums">{allRegs.length}</p>
             <p className="text-slate-500">Total teams</p>
           </div>
           <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-center min-w-[70px]">
-            <p className="text-lg font-bold text-emerald-400 tabular-nums">{confirmedRegs}</p>
-            <p className="text-slate-500">Confirmed</p>
-          </div>
-          <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-center min-w-[70px]">
-            <p className="text-lg font-bold text-amber-400 tabular-nums">{totalRegs - confirmedRegs}</p>
-            <p className="text-slate-500">Pending</p>
+            <p className="text-lg font-bold text-emerald-400 tabular-nums">{totalJoined}</p>
+            <p className="text-slate-500">Joined</p>
           </div>
         </div>
       </header>
@@ -400,17 +368,12 @@ export function RegistrationsPage() {
               key={t.id}
               tournament={t}
               registrations={regsByTournament[t.id] || []}
-              onRemove={setRemoveTarget}
+              onToggle={handleToggleRegistration}
             />
           ))}
         </div>
       )}
 
-      <RemoveDialog
-        reg={removeTarget}
-        onCancel={() => setRemoveTarget(null)}
-        onConfirm={handleRemoveConfirmed}
-      />
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
     </div>
   );

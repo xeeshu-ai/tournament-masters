@@ -5,52 +5,11 @@ import { TOURNAMENT_TYPES, calculateBrPoints, isPowerOfTwo } from '../constants'
 import { Toast } from '../components/Toast';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
-// ─── Registration status actions ────────────────────────────────────────────
-function RegistrationActions({ reg, onStatusChange }) {
-  const [busy, setBusy] = React.useState(false);
-  const update = async (status) => {
-    setBusy(true);
-    await supabaseAdmin.from('tournament_registrations').update({ status }).eq('id', reg.id);
-    setBusy(false);
-    onStatusChange();
-  };
-  return (
-    <div className="flex gap-1">
-      {reg.status !== 'confirmed' && (
-        <button
-          disabled={busy}
-          onClick={() => update('confirmed')}
-          className="text-[10px] rounded px-2 py-0.5 bg-emerald-900/40 text-emerald-400 hover:bg-emerald-800/60 transition-colors"
-        >
-          Confirm
-        </button>
-      )}
-      {reg.status !== 'pending' && (
-        <button
-          disabled={busy}
-          onClick={() => update('pending')}
-          className="text-[10px] rounded px-2 py-0.5 bg-amber-900/40 text-amber-400 hover:bg-amber-800/60 transition-colors"
-        >
-          Pending
-        </button>
-      )}
-      {reg.status !== 'rejected' && (
-        <button
-          disabled={busy}
-          onClick={() => update('rejected')}
-          className="text-[10px] rounded px-2 py-0.5 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
-        >
-          Reject
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ─── Inline BR Results ──────────────────────────────────────────────────────
 function BrResultsPanel({ tournament, registrations, onSaved }) {
-  const confirmedTeams = registrations.filter((r) => r.status === 'confirmed');
-  const teamCount = confirmedTeams.length;
+  // All non-rejected registrations are treated as joined (payment = confirmed)
+  const joinedTeams = registrations.filter((r) => r.status !== 'rejected');
+  const teamCount = joinedTeams.length;
   const [rows, setRows] = React.useState([]);
   const [saving, setSaving] = React.useState(false);
   const [toastMsg, setToastMsg] = React.useState(null);
@@ -59,7 +18,7 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
   React.useEffect(() => {
     const existing = tournament.cs_lw_results?.br_rows || [];
     setRows(
-      confirmedTeams.map((t, i) => ({
+      joinedTeams.map((t, i) => ({
         registrationId: t.id,
         teamName: t.team_name || 'Unnamed',
         position: existing[i]?.position ?? '',
@@ -96,7 +55,7 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
     if (onSaved) onSaved();
   };
 
-  if (teamCount === 0) return <div className="text-xs text-slate-400">No confirmed teams yet. Confirm registrations first.</div>;
+  if (teamCount === 0) return <div className="text-xs text-slate-400">No teams registered yet.</div>;
 
   return (
     <div className="space-y-4">
@@ -178,15 +137,15 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
 
 // ─── Inline CS/LW Results ───────────────────────────────────────────────────
 function CsLwResultsPanel({ tournament, registrations, onSaved }) {
-  const confirmedTeams = registrations.filter((r) => r.status === 'confirmed');
+  const joinedTeams = registrations.filter((r) => r.status !== 'rejected');
   const totalRounds = Number(tournament.total_rounds) || 13;
   const objectiveRounds = Math.ceil(totalRounds / 2) + 1;
 
   const pairs = React.useMemo(() => {
     const p = [];
-    for (let i = 0; i + 1 < confirmedTeams.length; i += 2) p.push({ a: confirmedTeams[i], b: confirmedTeams[i + 1] });
+    for (let i = 0; i + 1 < joinedTeams.length; i += 2) p.push({ a: joinedTeams[i], b: joinedTeams[i + 1] });
     return p;
-  }, [confirmedTeams.length]);
+  }, [joinedTeams.length]);
 
   const [matchData, setMatchData] = React.useState([]);
   const [saving, setSaving] = React.useState(false);
@@ -221,8 +180,8 @@ function CsLwResultsPanel({ tournament, registrations, onSaved }) {
     if (onSaved) onSaved();
   };
 
-  if (confirmedTeams.length === 0) return <div className="text-xs text-slate-400">No confirmed teams. Confirm registrations first.</div>;
-  if (confirmedTeams.length < 2) return <div className="text-xs text-amber-400">⚠️ Need at least 2 confirmed teams.</div>;
+  if (joinedTeams.length === 0) return <div className="text-xs text-slate-400">No teams registered yet.</div>;
+  if (joinedTeams.length < 2) return <div className="text-xs text-amber-400">⚠️ Need at least 2 teams.</div>;
   if (matchData.length !== pairs.length) return <div className="text-xs text-slate-400">Loading…</div>;
 
   return (
@@ -313,10 +272,15 @@ function BracketPanel({ tournamentId }) {
 
   const generateFixtures = async () => {
     setSaving(true);
-    const { data: regs } = await supabaseAdmin.from('tournament_registrations').select('id, team_name').eq('tournament_id', tournamentId).eq('status', 'confirmed');
+    // Use all non-rejected teams (payment = joined, no manual confirmation needed)
+    const { data: regs } = await supabaseAdmin
+      .from('tournament_registrations')
+      .select('id, team_name')
+      .eq('tournament_id', tournamentId)
+      .neq('status', 'rejected');
     const teams = regs || [];
     if (!teams.length || !isPowerOfTwo(teams.length) || teams.length < 4) {
-      notify('Need a power-of-two number of confirmed teams (≥ 4).', 'error');
+      notify('Need a power-of-two number of teams (≥ 4). Remove some teams to balance.', 'error');
       setSaving(false);
       return;
     }
@@ -389,7 +353,7 @@ function BracketPanel({ tournamentId }) {
         >
           {saving ? 'Working…' : bracket ? 'Regenerate fixtures' : 'Generate Round 1 fixtures'}
         </button>
-        <span className="text-[11px] text-slate-500">Needs a power-of-2 number of confirmed teams (≥ 4).</span>
+        <span className="text-[11px] text-slate-500">Needs a power-of-2 number of teams (≥ 4). Remove teams to balance if needed.</span>
       </div>
 
       {loading && <p className="text-xs text-slate-400">Loading bracket…</p>}
@@ -491,7 +455,6 @@ export function TournamentDetailPage() {
   const [confirmArchive, setConfirmArchive] = React.useState({ open: false });
   const [confirmDelete, setConfirmDelete] = React.useState({ open: false });
 
-  // active tab: overview | registrations | results | bracket | room
   const [tab, setTab] = React.useState(() => searchParams.get('tab') || 'overview');
 
   const notify = (message, type = 'success') => { setToast({ message, type }); setTimeout(() => setToast(null), 3000); };
@@ -502,8 +465,6 @@ export function TournamentDetailPage() {
     if (tErr) { notify('Failed to load tournament.', 'error'); setLoading(false); return; }
     setTournament(tData || null);
 
-    // ── Fetch registrations with members via registration_members join ──
-    // FIX: Use correct columns (game_uid, in_game_name, slot) not (player_uid, role)
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
       .select(`
@@ -523,13 +484,10 @@ export function TournamentDetailPage() {
       .eq('tournament_id', tournamentId)
       .order('created_at', { ascending: true });
 
-    if (rErr) {
-      console.error('Registrations fetch error:', rErr);
-    }
+    if (rErr) console.error('Registrations fetch error:', rErr);
 
     const regs = rData || [];
 
-    // FIX: Look up host player by host_player_id (UUID), not host_uid (which is a game UID string like "BGMI-Zeeshan001")
     const hostPlayerIds = [...new Set(regs.map((r) => r.host_player_id).filter(Boolean))];
     let hostMap = {};
     if (hostPlayerIds.length > 0) {
@@ -543,7 +501,6 @@ export function TournamentDetailPage() {
     const enriched = regs.map((r) => ({
       ...r,
       hostPlayer: hostMap[r.host_player_id] || null,
-      // Slot 0 = host, slots 1+ = teammates
       teammates: (r.registration_members || [])
         .sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0))
         .filter((m) => (m.slot ?? 0) > 0),
@@ -575,11 +532,26 @@ export function TournamentDetailPage() {
     navigate(`/${gameId}/tournaments`);
   };
 
+  // Remove a single registration (admin action)
+  const handleRemoveRegistration = async (reg) => {
+    const { error } = await supabaseAdmin
+      .from('tournament_registrations')
+      .update({ status: 'rejected' })
+      .eq('id', reg.id);
+    if (error) { notify('Failed to remove.', 'error'); return; }
+    notify('Registration removed.');
+    load();
+  };
+
   const typeLabel = tournament ? TOURNAMENT_TYPES.find((t) => t.id === tournament.type)?.label || tournament.type : '';
-  const confirmed = registrations.filter((r) => r.status === 'confirmed');
-  const pending = registrations.filter((r) => r.status === 'pending');
+
+  // All registrations = joined (payment done). Only rejected = removed.
+  const joined   = registrations.filter((r) => r.status !== 'rejected');
+  const rejected = registrations.filter((r) => r.status === 'rejected');
+
+  // Revenue = joined teams × entry fee (regardless of payment_id for now, since payment = confirmed)
   const totalRevenue = tournament?.entry_fee
-    ? confirmed.filter((r) => r.payment_id).reduce((sum) => sum + Number(tournament.entry_fee || 0), 0)
+    ? joined.length * Number(tournament.entry_fee || 0)
     : 0;
 
   const isLong = tournament?.type === 'long';
@@ -610,7 +582,6 @@ export function TournamentDetailPage() {
     <div className="space-y-4">
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
-      {/* ── Page header ── */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <button type="button" onClick={handleBack} className="text-xs text-sky-300 hover:text-sky-200 flex items-center gap-1">
@@ -635,38 +606,19 @@ export function TournamentDetailPage() {
           </div>
         </div>
 
-        {/* Action buttons */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => navigate(`/${gameId}/tournaments?editId=${tournamentId}`)}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => setConfirmArchive({ open: true })}
-          >
-            Archive
-          </button>
-          <button
-            type="button"
-            className="rounded px-3 py-1.5 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors text-xs"
-            onClick={() => setConfirmDelete({ open: true, title: tournament?.title })}
-          >
-            Delete
-          </button>
+          <button type="button" className="btn-secondary" onClick={() => navigate(`/${gameId}/tournaments?editId=${tournamentId}`)}>Edit</button>
+          <button type="button" className="btn-secondary" onClick={() => setConfirmArchive({ open: true })}>Archive</button>
+          <button type="button" className="rounded px-3 py-1.5 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors text-xs" onClick={() => setConfirmDelete({ open: true, title: tournament?.title })}>Delete</button>
         </div>
       </header>
 
-      {/* ── Revenue summary bar ── */}
+      {/* Stats bar — payment based, no manual confirmation */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {[
           { label: 'Total teams', value: registrations.length, color: 'text-slate-50' },
-          { label: 'Confirmed', value: confirmed.length, color: 'text-emerald-400' },
-          { label: 'Pending', value: pending.length, color: 'text-amber-400' },
+          { label: 'Joined (paid)', value: joined.length, color: 'text-emerald-400' },
+          { label: 'Removed', value: rejected.length, color: 'text-red-400' },
           { label: 'Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}`, color: 'text-emerald-400' },
         ].map((stat) => (
           <div key={stat.label} className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-center">
@@ -676,7 +628,7 @@ export function TournamentDetailPage() {
         ))}
       </div>
 
-      {/* ── Tabs ── */}
+      {/* Tabs */}
       <div className="border-b border-slate-800">
         <nav className="flex gap-0 overflow-x-auto">
           {TABS.map((t) => (
@@ -685,9 +637,7 @@ export function TournamentDetailPage() {
               type="button"
               onClick={() => setTab(t.id)}
               className={`shrink-0 px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
-                tab === t.id
-                  ? 'border-sky-500 text-sky-300'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                tab === t.id ? 'border-sky-500 text-sky-300' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
               {t.label}
@@ -696,7 +646,6 @@ export function TournamentDetailPage() {
         </nav>
       </div>
 
-      {/* ── Tab content ── */}
       <div className="min-h-[200px]">
         {/* OVERVIEW */}
         {tab === 'overview' && (
@@ -747,6 +696,9 @@ export function TournamentDetailPage() {
         {/* REGISTRATIONS */}
         {tab === 'registrations' && (
           <div className="space-y-3">
+            <div className="rounded-lg bg-sky-500/10 border border-sky-700/50 px-4 py-2 text-xs text-sky-300">
+              💳 Payment = Joined. All registered teams are active. Use Remove to kick a team.
+            </div>
             <div className="card overflow-x-auto text-xs">
               {loading ? (
                 <p className="text-xs text-slate-400">Loading registrations…</p>
@@ -761,21 +713,22 @@ export function TournamentDetailPage() {
                       <th>Members</th>
                       <th>Host</th>
                       <th>Host UID</th>
-                      <th>Status</th>
                       <th>Order ID</th>
                       <th>Payment ID</th>
                       <th>Registered</th>
-                      <th>Actions</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {registrations.map((r, idx) => {
                       const allMembers = (r.registration_members || []).sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
+                      const isRemoved = r.status === 'rejected';
                       return (
-                        <tr key={r.id}>
+                        <tr key={r.id} className={isRemoved ? 'opacity-40' : ''}>
                           <td className="text-slate-500">{idx + 1}</td>
                           <td>
                             <div className="font-medium">{r.team_name || 'Unnamed team'}</div>
+                            {isRemoved && <div className="text-[10px] text-red-400">Removed</div>}
                           </td>
                           <td>
                             {allMembers.length > 0 ? (
@@ -787,9 +740,7 @@ export function TournamentDetailPage() {
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-slate-500 text-[10px]">
-                                {r.team_members_summary || '—'}
-                              </span>
+                              <span className="text-slate-500 text-[10px]">{r.team_members_summary || '—'}</span>
                             )}
                           </td>
                           <td>
@@ -797,18 +748,30 @@ export function TournamentDetailPage() {
                             {r.hostPlayer?.phone && <div className="text-[10px] text-slate-500">{r.hostPlayer.phone}</div>}
                           </td>
                           <td className="font-mono text-[11px]">{r.host_uid}</td>
-                          <td>
-                            <span className={'status-pill ' + (r.status === 'confirmed' ? 'approved' : r.status === 'pending' ? 'pending' : '')}>
-                              {r.status}
-                            </span>
-                          </td>
                           <td className="font-mono text-[10px] text-sky-400">{r.razorpay_order_id || '—'}</td>
                           <td className="font-mono text-[10px] text-emerald-400">{r.payment_id || '—'}</td>
                           <td className="whitespace-nowrap text-slate-400">
                             {r.created_at ? new Date(r.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                           </td>
                           <td>
-                            <RegistrationActions reg={r} onStatusChange={load} />
+                            {!isRemoved ? (
+                              <button
+                                onClick={() => handleRemoveRegistration(r)}
+                                className="text-[10px] rounded px-2 py-0.5 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  await supabaseAdmin.from('tournament_registrations').update({ status: 'confirmed' }).eq('id', r.id);
+                                  load();
+                                }}
+                                className="text-[10px] rounded px-2 py-0.5 bg-emerald-900/40 text-emerald-400 hover:bg-emerald-800/60 transition-colors"
+                              >
+                                Restore
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -825,7 +788,7 @@ export function TournamentDetailPage() {
           <div className="space-y-3">
             <div className="text-[11px] text-slate-400">
               Mode: <span className="text-slate-200 uppercase font-medium">{tournament.mode}</span>
-              {' · '}{confirmed.length} confirmed team{confirmed.length !== 1 ? 's' : ''}
+              {' · '}{joined.length} team{joined.length !== 1 ? 's' : ''} joined
             </div>
             {isBR ? (
               <BrResultsPanel tournament={tournament} registrations={registrations} onSaved={load} />
