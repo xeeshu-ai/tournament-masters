@@ -7,7 +7,6 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 
 // ─── Inline BR Results ──────────────────────────────────────────────────────
 function BrResultsPanel({ tournament, registrations, onSaved }) {
-  // All non-rejected registrations are treated as joined (payment = confirmed)
   const joinedTeams = registrations.filter((r) => r.status !== 'rejected');
   const teamCount = joinedTeams.length;
   const [rows, setRows] = React.useState([]);
@@ -16,15 +15,19 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
   const notify = (msg, type = 'success') => { setToastMsg({ msg, type }); setTimeout(() => setToastMsg(null), 3000); };
 
   React.useEffect(() => {
-    const existing = tournament.cs_lw_results?.br_rows || [];
+    // FIX: read from single_br_results (array), not cs_lw_results.br_rows
+    const existing = Array.isArray(tournament.single_br_results) ? tournament.single_br_results : [];
     setRows(
-      joinedTeams.map((t, i) => ({
-        registrationId: t.id,
-        teamName: t.team_name || 'Unnamed',
-        position: existing[i]?.position ?? '',
-        kills: existing[i]?.kills ?? '',
-        points: existing[i]?.points ?? '',
-      }))
+      joinedTeams.map((t) => {
+        const found = existing.find((e) => e.team_name === t.team_name);
+        return {
+          registrationId: t.id,
+          teamName: t.team_name || 'Unnamed',
+          position: found?.position ?? '',
+          kills: found?.kills ?? '',
+          points: found?.points ?? '',
+        };
+      })
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament.id]);
@@ -45,9 +48,21 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
 
   const save = async () => {
     setSaving(true);
+    // FIX: save as sorted array to single_br_results so public app can read it
+    const resultArray = [...rows]
+      .filter((r) => r.position !== '')
+      .sort((a, b) => Number(b.points) - Number(a.points))
+      .map((r) => ({
+        team_name: r.teamName,
+        position: Number(r.position),
+        kills: Number(r.kills),
+        points: Number(r.points),
+        player_names: [],
+      }));
+    const winnerText = resultArray[0] ? `🏆 Winner: ${resultArray[0].team_name}` : '';
     const { error } = await supabaseAdmin
       .from('tournaments')
-      .update({ cs_lw_results: { br_rows: rows } })
+      .update({ single_br_results: resultArray, winner_text: winnerText })
       .eq('id', tournament.id);
     setSaving(false);
     if (error) { notify('Failed to save: ' + error.message, 'error'); return; }
@@ -135,6 +150,109 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
   );
 }
 
+// ─── Inline TDM Results ─────────────────────────────────────────────────────
+function TdmResultsPanel({ tournament, registrations, onSaved }) {
+  const KILL_TARGET = 40;
+  const joinedTeams = registrations.filter((r) => r.status !== 'rejected');
+  const pairs = React.useMemo(() => {
+    const p = [];
+    for (let i = 0; i + 1 < joinedTeams.length; i += 2) p.push({ a: joinedTeams[i], b: joinedTeams[i + 1] });
+    return p;
+  }, [joinedTeams.length]);
+
+  const [matchData, setMatchData] = React.useState([]);
+  const [saving, setSaving] = React.useState(false);
+  const [toastMsg, setToastMsg] = React.useState(null);
+  const notify = (msg, type = 'success') => { setToastMsg({ msg, type }); setTimeout(() => setToastMsg(null), 3000); };
+
+  React.useEffect(() => {
+    const existing = tournament.tdm_results?.matches || [];
+    setMatchData(pairs.map((pair, i) => ({
+      killsA: existing[i]?.team_a?.kills ?? '',
+      killsB: existing[i]?.team_b?.kills ?? '',
+      winner: existing[i]?.winner_team === pair.a.team_name ? 'a' : existing[i]?.winner_team === pair.b.team_name ? 'b' : '',
+    })));
+  }, [pairs.length, tournament.id]);
+
+  const setField = (i, field, val) => setMatchData((prev) => { const n = [...prev]; n[i] = { ...n[i], [field]: val }; return n; });
+  const setWinner = (i, val) => setMatchData((prev) => { const n = [...prev]; n[i] = { ...n[i], winner: val }; return n; });
+
+  const save = async () => {
+    setSaving(true);
+    const matches = pairs.map((pair, i) => {
+      const md = matchData[i] || {};
+      const winnerTeam = md.winner === 'a' ? pair.a.team_name : md.winner === 'b' ? pair.b.team_name : null;
+      return {
+        team_a: { name: pair.a.team_name, kills: Number(md.killsA || 0) },
+        team_b: { name: pair.b.team_name, kills: Number(md.killsB || 0) },
+        winner_team: winnerTeam,
+      };
+    });
+    const winnerTeam = matches.find((m) => m.winner_team)?.winner_team || null;
+    const { error } = await supabaseAdmin
+      .from('tournaments')
+      .update({ tdm_results: { kill_target: KILL_TARGET, matches }, winner_text: winnerTeam ? `🏆 Winner: ${winnerTeam}` : '' })
+      .eq('id', tournament.id);
+    setSaving(false);
+    if (error) { notify('Failed: ' + error.message, 'error'); return; }
+    notify('TDM results saved!');
+    if (onSaved) onSaved();
+  };
+
+  if (joinedTeams.length === 0) return <div className="text-xs text-slate-400">No teams registered yet.</div>;
+  if (joinedTeams.length < 2) return <div className="text-xs text-amber-400">⚠️ Need at least 2 teams.</div>;
+
+  return (
+    <div className="space-y-4">
+      {toastMsg && (
+        <div className={`rounded-lg px-3 py-2 text-xs ${toastMsg.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{toastMsg.msg}</div>
+      )}
+      <div className="rounded-lg bg-amber-500/10 border border-amber-700 px-4 py-2 text-xs text-amber-300">
+        🎯 Kill target: <strong>{KILL_TARGET}</strong> kills per team. First to {KILL_TARGET} wins.
+      </div>
+      {pairs.map((pair, pairIdx) => {
+        const md = matchData[pairIdx] || {};
+        return (
+          <div key={pairIdx} className="card space-y-3">
+            <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Match {pairIdx + 1}</div>
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-200">{pair.a.team_name}</p>
+                <div>
+                  <label className="label">Kills (max {KILL_TARGET})</label>
+                  <input type="number" className="input w-24 text-xs" min={0} max={KILL_TARGET} value={md.killsA} onChange={(e) => setField(pairIdx, 'killsA', Math.min(KILL_TARGET, Math.max(0, Number(e.target.value))))} />
+                </div>
+              </div>
+              <div className="flex flex-col items-center gap-2 pt-6">
+                <span className="text-slate-500 font-bold text-xs">VS</span>
+                <div className="space-y-1 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Winner</p>
+                  <button onClick={() => setWinner(pairIdx, md.winner === 'a' ? '' : 'a')} className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${md.winner === 'a' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                    {pair.a.team_name.substring(0, 10)}
+                  </button>
+                  <button onClick={() => setWinner(pairIdx, md.winner === 'b' ? '' : 'b')} className={`block w-full rounded px-2 py-1 text-[11px] font-semibold transition-colors ${md.winner === 'b' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                    {pair.b.team_name.substring(0, 10)}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-200">{pair.b.team_name}</p>
+                <div>
+                  <label className="label">Kills (max {KILL_TARGET})</label>
+                  <input type="number" className="input w-24 text-xs" min={0} max={KILL_TARGET} value={md.killsB} onChange={(e) => setField(pairIdx, 'killsB', Math.min(KILL_TARGET, Math.max(0, Number(e.target.value))))} />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <div className="flex justify-end">
+        <button className="btn-primary text-xs" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save TDM results'}</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Inline CS/LW Results ───────────────────────────────────────────────────
 function CsLwResultsPanel({ tournament, registrations, onSaved }) {
   const joinedTeams = registrations.filter((r) => r.status !== 'rejected');
@@ -172,7 +290,7 @@ function CsLwResultsPanel({ tournament, registrations, onSaved }) {
     const winnerTeam = matches.find((m) => m.winner_team)?.winner_team || null;
     const { error } = await supabaseAdmin
       .from('tournaments')
-      .update({ cs_lw_results: { total_rounds: totalRounds, objective_rounds: objectiveRounds, matches }, winner_text: winnerTeam ? `Winner: ${winnerTeam}` : '' })
+      .update({ cs_lw_results: { total_rounds: totalRounds, objective_rounds: objectiveRounds, matches }, winner_text: winnerTeam ? `🏆 Winner: ${winnerTeam}` : '' })
       .eq('id', tournament.id);
     setSaving(false);
     if (error) { notify('Failed to save: ' + error.message, 'error'); return; }
@@ -272,7 +390,6 @@ function BracketPanel({ tournamentId }) {
 
   const generateFixtures = async () => {
     setSaving(true);
-    // Use all non-rejected teams (payment = joined, no manual confirmation needed)
     const { data: regs } = await supabaseAdmin
       .from('tournament_registrations')
       .select('id, team_name')
@@ -343,22 +460,14 @@ function BracketPanel({ tournamentId }) {
       {toastMsg && (
         <div className={`rounded-lg px-3 py-2 text-xs ${toastMsg.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{toastMsg.msg}</div>
       )}
-
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          className="btn-primary text-xs"
-          onClick={generateFixtures}
-          disabled={saving || loading}
-        >
+        <button type="button" className="btn-primary text-xs" onClick={generateFixtures} disabled={saving || loading}>
           {saving ? 'Working…' : bracket ? 'Regenerate fixtures' : 'Generate Round 1 fixtures'}
         </button>
-        <span className="text-[11px] text-slate-500">Needs a power-of-2 number of teams (≥ 4). Remove teams to balance if needed.</span>
+        <span className="text-[11px] text-slate-500">Needs a power-of-2 number of teams (≥ 4).</span>
       </div>
-
       {loading && <p className="text-xs text-slate-400">Loading bracket…</p>}
       {!loading && !roundNumbers.length && <p className="text-xs text-slate-400">No fixtures yet. Click Generate to begin.</p>}
-
       {roundNumbers.map((round) => (
         <div key={round} className="card space-y-3">
           <h3 className="text-sm font-semibold text-slate-100">Round {round}</h3>
@@ -371,19 +480,9 @@ function BracketPanel({ tournamentId }) {
                 <div key={m.id} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-3">
                   <p className="text-[11px] text-slate-500">Match {m.match_number}</p>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleWinnerChange(m, m.team_a_registration_id)}
-                      className={`flex-1 rounded px-3 py-2 text-xs font-semibold transition-colors ${m.winner_registration_id === m.team_a_registration_id ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-                    >
-                      {teamA}
-                    </button>
+                    <button onClick={() => handleWinnerChange(m, m.team_a_registration_id)} className={`flex-1 rounded px-3 py-2 text-xs font-semibold transition-colors ${m.winner_registration_id === m.team_a_registration_id ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{teamA}</button>
                     <span className="text-slate-600 font-bold text-xs">VS</span>
-                    <button
-                      onClick={() => handleWinnerChange(m, m.team_b_registration_id)}
-                      className={`flex-1 rounded px-3 py-2 text-xs font-semibold transition-colors ${m.winner_registration_id === m.team_b_registration_id ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
-                    >
-                      {teamB}
-                    </button>
+                    <button onClick={() => handleWinnerChange(m, m.team_b_registration_id)} className={`flex-1 rounded px-3 py-2 text-xs font-semibold transition-colors ${m.winner_registration_id === m.team_b_registration_id ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{teamB}</button>
                   </div>
                   {winner && <p className="text-[11px] text-emerald-400">✓ Winner: {winner}</p>}
                 </div>
@@ -400,6 +499,7 @@ function BracketPanel({ tournamentId }) {
 function RoomCodePanel({ tournamentId }) {
   const [roomId, setRoomId] = React.useState('');
   const [roomPass, setRoomPass] = React.useState('');
+  const [isRevealed, setIsRevealed] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [existing, setExisting] = React.useState(null);
   const [toastMsg, setToastMsg] = React.useState(null);
@@ -408,19 +508,23 @@ function RoomCodePanel({ tournamentId }) {
   React.useEffect(() => {
     supabaseAdmin.from('room_codes').select('*').eq('tournament_id', tournamentId).maybeSingle()
       .then(({ data }) => {
-        if (data) { setExisting(data); setRoomId(data.room_id || ''); setRoomPass(data.room_password || ''); }
+        if (data) { setExisting(data); setRoomId(data.room_id || ''); setRoomPass(data.room_password || ''); setIsRevealed(data.is_revealed || false); }
       });
   }, [tournamentId]);
 
   const save = async () => {
     setSaving(true);
-    const payload = { tournament_id: tournamentId, room_id: roomId, room_password: roomPass };
+    const payload = { tournament_id: tournamentId, room_id: roomId, room_password: roomPass, is_revealed: isRevealed };
     const { error } = existing
       ? await supabaseAdmin.from('room_codes').update(payload).eq('id', existing.id)
       : await supabaseAdmin.from('room_codes').insert(payload);
     setSaving(false);
     if (error) { notify('Failed: ' + error.message, 'error'); return; }
     notify('Room code saved!');
+    if (!existing) {
+      const { data } = await supabaseAdmin.from('room_codes').select('*').eq('tournament_id', tournamentId).maybeSingle();
+      if (data) setExisting(data);
+    }
   };
 
   return (
@@ -429,6 +533,7 @@ function RoomCodePanel({ tournamentId }) {
         <div className={`rounded-lg px-3 py-2 text-xs ${toastMsg.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{toastMsg.msg}</div>
       )}
       <h3 className="text-sm font-semibold text-slate-100">Room code</h3>
+      <p className="text-[11px] text-slate-400">Save room code first, then reveal when ready. Only confirmed team hosts can see it in the public app.</p>
       <div>
         <label className="label">Room ID</label>
         <input className="input" value={roomId} onChange={(e) => setRoomId(e.target.value)} placeholder="Room ID" />
@@ -436,6 +541,23 @@ function RoomCodePanel({ tournamentId }) {
       <div>
         <label className="label">Room password</label>
         <input className="input" value={roomPass} onChange={(e) => setRoomPass(e.target.value)} placeholder="Password" />
+      </div>
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <div
+            onClick={() => setIsRevealed((v) => !v)}
+            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
+              isRevealed ? 'bg-emerald-600' : 'bg-slate-700'
+            }`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+              isRevealed ? 'translate-x-4' : 'translate-x-0'
+            }`} />
+          </div>
+          <span className={isRevealed ? 'text-emerald-400 font-semibold' : 'text-slate-400'}>
+            {isRevealed ? '🟢 Revealed to team hosts' : '🔴 Hidden (not revealed yet)'}
+          </span>
+        </label>
       </div>
       <button className="btn-primary text-xs" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save room code'}</button>
     </div>
@@ -465,45 +587,43 @@ export function TournamentDetailPage() {
     if (tErr) { notify('Failed to load tournament.', 'error'); setLoading(false); return; }
     setTournament(tData || null);
 
+    // FIX: fetch registrations WITHOUT nested join to avoid silent FK name mismatch
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
-      .select(`
-        id,
-        tournament_id,
-        host_uid,
-        host_player_id,
-        team_name,
-        team_members_summary,
-        status,
-        created_at,
-        razorpay_order_id,
-        payment_id,
-        slot_reserved_at,
-        registration_members ( slot, game_uid, in_game_name, player_id )
-      `)
+      .select('id, tournament_id, host_uid, host_player_id, team_name, team_members_summary, status, created_at, razorpay_order_id, payment_id, slot_reserved_at')
       .eq('tournament_id', tournamentId)
       .order('created_at', { ascending: true });
 
     if (rErr) console.error('Registrations fetch error:', rErr);
-
     const regs = rData || [];
+
+    // FIX: fetch registration_members separately
+    const regIds = regs.map((r) => r.id);
+    let membersByReg = {};
+    if (regIds.length > 0) {
+      const { data: membersData } = await supabaseAdmin
+        .from('registration_members')
+        .select('registration_id, slot, game_uid, in_game_name, player_id')
+        .in('registration_id', regIds)
+        .order('slot', { ascending: true });
+      (membersData || []).forEach((m) => {
+        if (!membersByReg[m.registration_id]) membersByReg[m.registration_id] = [];
+        membersByReg[m.registration_id].push(m);
+      });
+    }
 
     const hostPlayerIds = [...new Set(regs.map((r) => r.host_player_id).filter(Boolean))];
     let hostMap = {};
     if (hostPlayerIds.length > 0) {
-      const { data: playerRows } = await supabaseAdmin
-        .from('players')
-        .select('id, full_name, phone')
-        .in('id', hostPlayerIds);
+      const { data: playerRows } = await supabaseAdmin.from('players').select('id, full_name, phone').in('id', hostPlayerIds);
       (playerRows || []).forEach((p) => { hostMap[p.id] = p; });
     }
 
     const enriched = regs.map((r) => ({
       ...r,
       hostPlayer: hostMap[r.host_player_id] || null,
-      teammates: (r.registration_members || [])
-        .sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0))
-        .filter((m) => (m.slot ?? 0) > 0),
+      registration_members: membersByReg[r.id] || [],
+      teammates: (membersByReg[r.id] || []).filter((m) => (m.slot ?? 0) > 0),
     }));
 
     setRegistrations(enriched);
@@ -532,12 +652,8 @@ export function TournamentDetailPage() {
     navigate(`/${gameId}/tournaments`);
   };
 
-  // Remove a single registration (admin action)
   const handleRemoveRegistration = async (reg) => {
-    const { error } = await supabaseAdmin
-      .from('tournament_registrations')
-      .update({ status: 'rejected' })
-      .eq('id', reg.id);
+    const { error } = await supabaseAdmin.from('tournament_registrations').update({ status: 'rejected' }).eq('id', reg.id);
     if (error) { notify('Failed to remove.', 'error'); return; }
     notify('Registration removed.');
     load();
@@ -545,18 +661,16 @@ export function TournamentDetailPage() {
 
   const typeLabel = tournament ? TOURNAMENT_TYPES.find((t) => t.id === tournament.type)?.label || tournament.type : '';
 
-  // All registrations = joined (payment done). Only rejected = removed.
   const joined   = registrations.filter((r) => r.status !== 'rejected');
   const rejected = registrations.filter((r) => r.status === 'rejected');
 
-  // Revenue = joined teams × entry fee (regardless of payment_id for now, since payment = confirmed)
-  const totalRevenue = tournament?.entry_fee
-    ? joined.length * Number(tournament.entry_fee || 0)
-    : 0;
+  const totalRevenue = tournament?.entry_fee ? joined.length * Number(tournament.entry_fee || 0) : 0;
 
   const isLong = tournament?.type === 'long';
   const hasBracket = isLong && (tournament?.mode === 'cs' || tournament?.mode === 'lw');
   const isBR = tournament?.mode === 'br';
+  const isTDM = tournament?.mode === 'tdm';
+  const isCSorLW = tournament?.mode === 'cs' || tournament?.mode === 'lw';
 
   const TABS = [
     { id: 'overview', label: 'Overview' },
@@ -605,7 +719,6 @@ export function TournamentDetailPage() {
             {tournament?.status && <span className="status-pill approved">Status: {tournament.status}</span>}
           </div>
         </div>
-
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <button type="button" className="btn-secondary" onClick={() => navigate(`/${gameId}/tournaments?editId=${tournamentId}`)}>Edit</button>
           <button type="button" className="btn-secondary" onClick={() => setConfirmArchive({ open: true })}>Archive</button>
@@ -613,7 +726,6 @@ export function TournamentDetailPage() {
         </div>
       </header>
 
-      {/* Stats bar — payment based, no manual confirmation */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         {[
           { label: 'Total teams', value: registrations.length, color: 'text-slate-50' },
@@ -628,7 +740,6 @@ export function TournamentDetailPage() {
         ))}
       </div>
 
-      {/* Tabs */}
       <div className="border-b border-slate-800">
         <nav className="flex gap-0 overflow-x-auto">
           {TABS.map((t) => (
@@ -647,7 +758,6 @@ export function TournamentDetailPage() {
       </div>
 
       <div className="min-h-[200px]">
-        {/* OVERVIEW */}
         {tab === 'overview' && (
           <div className="grid gap-3 md:grid-cols-2">
             <div className="card space-y-2 text-xs">
@@ -693,7 +803,6 @@ export function TournamentDetailPage() {
           </div>
         )}
 
-        {/* REGISTRATIONS */}
         {tab === 'registrations' && (
           <div className="space-y-3">
             <div className="rounded-lg bg-sky-500/10 border border-sky-700/50 px-4 py-2 text-xs text-sky-300">
@@ -755,22 +864,9 @@ export function TournamentDetailPage() {
                           </td>
                           <td>
                             {!isRemoved ? (
-                              <button
-                                onClick={() => handleRemoveRegistration(r)}
-                                className="text-[10px] rounded px-2 py-0.5 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
-                              >
-                                Remove
-                              </button>
+                              <button onClick={() => handleRemoveRegistration(r)} className="text-[10px] rounded px-2 py-0.5 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors">Remove</button>
                             ) : (
-                              <button
-                                onClick={async () => {
-                                  await supabaseAdmin.from('tournament_registrations').update({ status: 'confirmed' }).eq('id', r.id);
-                                  load();
-                                }}
-                                className="text-[10px] rounded px-2 py-0.5 bg-emerald-900/40 text-emerald-400 hover:bg-emerald-800/60 transition-colors"
-                              >
-                                Restore
-                              </button>
+                              <button onClick={async () => { await supabaseAdmin.from('tournament_registrations').update({ status: 'confirmed' }).eq('id', r.id); load(); }} className="text-[10px] rounded px-2 py-0.5 bg-emerald-900/40 text-emerald-400 hover:bg-emerald-800/60 transition-colors">Restore</button>
                             )}
                           </td>
                         </tr>
@@ -783,30 +879,20 @@ export function TournamentDetailPage() {
           </div>
         )}
 
-        {/* RESULTS */}
         {tab === 'results' && tournament && (
           <div className="space-y-3">
             <div className="text-[11px] text-slate-400">
               Mode: <span className="text-slate-200 uppercase font-medium">{tournament.mode}</span>
               {' · '}{joined.length} team{joined.length !== 1 ? 's' : ''} joined
             </div>
-            {isBR ? (
-              <BrResultsPanel tournament={tournament} registrations={registrations} onSaved={load} />
-            ) : (
-              <CsLwResultsPanel tournament={tournament} registrations={registrations} onSaved={load} />
-            )}
+            {isBR && <BrResultsPanel tournament={tournament} registrations={registrations} onSaved={load} />}
+            {isTDM && <TdmResultsPanel tournament={tournament} registrations={registrations} onSaved={load} />}
+            {isCSorLW && <CsLwResultsPanel tournament={tournament} registrations={registrations} onSaved={load} />}
           </div>
         )}
 
-        {/* BRACKET */}
-        {tab === 'bracket' && hasBracket && (
-          <BracketPanel tournamentId={tournamentId} />
-        )}
-
-        {/* ROOM CODE */}
-        {tab === 'room' && (
-          <RoomCodePanel tournamentId={tournamentId} />
-        )}
+        {tab === 'bracket' && hasBracket && <BracketPanel tournamentId={tournamentId} />}
+        {tab === 'room' && <RoomCodePanel tournamentId={tournamentId} />}
       </div>
 
       <ConfirmDialog
