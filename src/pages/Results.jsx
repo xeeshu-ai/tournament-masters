@@ -439,10 +439,10 @@ function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, o
 function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, onSaveBr, saving, winnerText, setWinnerText }) {
   return (
     <div className="space-y-4">
-      <h2 className="text-sm font-semibold text-slate-100">Single Match · Battle Royale</h2>
+      <h2 className="text-sm font-semibold text-slate-100">Battle Royale · Result Entry</h2>
       <div className="card overflow-x-auto text-xs">
         {teams.length === 0 ? (
-          <p className="text-xs text-slate-400">No confirmed teams registered.</p>
+          <p className="text-xs text-slate-400">No registered teams found.</p>
         ) : (
           <table className="table">
             <thead>
@@ -608,11 +608,13 @@ export function ResultsPage() {
   }, [gameId]);
 
   const loadTeams = async (tid) => {
+    // FIX: load all non-rejected registrations, not just 'confirmed'
+    // Many tournaments use null/pending status for registered teams
     const { data: regsData } = await supabaseAdmin
       .from('tournament_registrations')
       .select('*')
       .eq('tournament_id', tid)
-      .eq('status', 'confirmed');
+      .neq('status', 'rejected');
 
     const regs = regsData || [];
     setTeams(regs);
@@ -656,7 +658,6 @@ export function ResultsPage() {
     setBrRows((rows) => {
       const next = [...rows];
       const row = { ...next[index], [field]: value };
-      // FIX: correct arg order — calculateBrPoints(position, kills)
       row.points = calculateBrPoints(Number(row.position || 0), Number(row.kills || 0));
       next[index] = row;
       return next;
@@ -716,10 +717,9 @@ export function ResultsPage() {
   };
 
   // ── Mode flags ───────────────────────────────────────────────────
-  // BGMI TDM → TdmResultEntry (kills to 40, team-level only)
-  // FF CS / LW → CsLwResultEntry (rounds + per-player K/D)
-  // BR (any game) → BrResultEntry (kills + position → points)
-  const isSingleBR = selected && selected.type === 'single' && selected.mode === 'br';
+  // FIX: isSingleBR now matches ALL BR tournaments regardless of type (single/long)
+  // BGMI BR tournaments use type='long' but still use single_br_results column
+  const isSingleBR = selected && selected.mode === 'br';
   const isBgmiTDM  = selected && selected.mode === 'tdm' && selected.game_id === 'bgmi';
   const isCSorLW   = selected && (selected.mode === 'cs' || selected.mode === 'lw');
 
@@ -806,7 +806,7 @@ export function ResultsPage() {
         </section>
       )}
 
-      {/* BR (FF + BGMI): kills + position → points */}
+      {/* BR (FF + BGMI, any type): kills + position → points */}
       {selected && isSingleBR && (
         <section>
           <BrResultEntry
