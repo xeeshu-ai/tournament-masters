@@ -24,8 +24,7 @@ function buildPlayerEntries(reg, uidToName) {
   }));
 }
 
-// ── BGMI TDM Result Entry ─────────────────────────────────────────────────────
-// First team to reach kill_target (40) wins. No rounds, no player K/D.
+// ── BGMI TDM Result Entry ───────────────────────────────────────────────────
 function TdmResultEntry({ tournament, teams, onSaved }) {
   const killTarget = BGMI_TDM_KILL_TARGET;
 
@@ -217,8 +216,7 @@ function TdmResultEntry({ tournament, teams, onSaved }) {
   );
 }
 
-// ── FF CS / LW Result Entry ───────────────────────────────────────────────────
-// Rounds won per team + per-player kills & deaths. FF-only.
+// ── FF CS / LW Result Entry ───────────────────────────────────────────────
 function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   const totalRounds = Number(tournament.total_rounds) || 13;
   const objectiveRounds = Math.ceil(totalRounds / 2) + 1;
@@ -437,7 +435,7 @@ function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, o
   );
 }
 
-// ── BR Result Entry ───────────────────────────────────────────────────────────
+// ── BR Result Entry ─────────────────────────────────────────────────────
 function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, onSaveBr, saving, winnerText, setWinnerText }) {
   return (
     <div className="space-y-4">
@@ -497,7 +495,7 @@ function BrResultEntry({ tournament, teams, uidToName, brRows, onChangeBrRow, on
   );
 }
 
-// ── End Tournament ────────────────────────────────────────────────────────────
+// ── End Tournament ──────────────────────────────────────────────────
 function EndTournamentSection({ tournament, onEnded }) {
   const [confirm, setConfirm] = React.useState(false);
   const [ending, setEnding] = React.useState(false);
@@ -565,7 +563,7 @@ function EndTournamentSection({ tournament, onEnded }) {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// ── Main Page ─────────────────────────────────────────────────────
 export function ResultsPage() {
   const { gameId } = useParams();
   const [searchParams] = useSearchParams();
@@ -658,8 +656,8 @@ export function ResultsPage() {
     setBrRows((rows) => {
       const next = [...rows];
       const row = { ...next[index], [field]: value };
-      // Pass gameId so BGMI uses position-point table, FF uses legacy formula
-      row.points = calculateBrPoints(row.kills, row.position, gameId);
+      // FIX: correct arg order — calculateBrPoints(position, kills)
+      row.points = calculateBrPoints(Number(row.position || 0), Number(row.kills || 0));
       next[index] = row;
       return next;
     });
@@ -717,7 +715,7 @@ export function ResultsPage() {
     setStatus('idle');
   };
 
-  // ── Mode flags ──────────────────────────────────────────────────────────────
+  // ── Mode flags ───────────────────────────────────────────────────
   // BGMI TDM → TdmResultEntry (kills to 40, team-level only)
   // FF CS / LW → CsLwResultEntry (rounds + per-player K/D)
   // BR (any game) → BrResultEntry (kills + position → points)
