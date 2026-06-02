@@ -11,14 +11,6 @@ const navItems = [
   { section: 'Tournaments' },
   { to: 'single-tournaments', label: 'Single Matches',   accent: 'sky' },
   { to: 'long-tournaments',   label: 'Long Tournaments', accent: 'violet' },
-
-  { section: 'Players' },
-  { to: 'names', label: 'Name Changes' },
-  { to: 'bans',  label: 'Ban Manager' },
-
-  { section: 'Other' },
-  { to: 'broadcast',  label: 'Broadcast' },
-  { to: 'complaints', label: 'Complaints' },
 ]
 
 const GAME_ACCENT = {
