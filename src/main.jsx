@@ -14,14 +14,7 @@ import { LongTournamentsPage } from './pages/LongTournaments';
 import { SingleTournamentDetailPage } from './pages/SingleTournamentDetail';
 import { LongTournamentDetailPage } from './pages/LongTournamentDetail';
 import { RegistrationsPage } from './pages/Registrations';
-import { PaymentsPage } from './pages/Payments';
-import { ComplaintsPage } from './pages/Complaints';
-import { BracketManagerPage } from './pages/Brackets';
 import { ResultsPage } from './pages/Results';
-import { RoomCodesPage } from './pages/Rooms';
-import { NameChangesPage } from './pages/Names';
-import { BanManagerPage } from './pages/Bans';
-import { BroadcastPage } from './pages/Broadcast';
 
 function GlobalPlayersShell({ user }) {
   const navigate = useNavigate();
@@ -97,15 +90,9 @@ function AdminShell() {
         <Route path="tournaments" element={<SingleTournamentsPage />} />
         <Route path="tournaments/:tournamentId" element={<SingleTournamentDetailPage />} />
 
+        {/* Shared utility views that will later be integrated into per-tournament focus mode */}
         <Route path="registrations" element={<RegistrationsPage />} />
-        <Route path="brackets" element={<BracketManagerPage />} />
         <Route path="results" element={<ResultsPage />} />
-        <Route path="payments" element={<PaymentsPage />} />
-        <Route path="rooms" element={<RoomCodesPage />} />
-        <Route path="names" element={<NameChangesPage />} />
-        <Route path="bans" element={<BanManagerPage />} />
-        <Route path="broadcast" element={<BroadcastPage />} />
-        <Route path="complaints" element={<ComplaintsPage />} />
       </Route>
       <Route path="*" element={<RedirectToGames />} />
     </Routes>
