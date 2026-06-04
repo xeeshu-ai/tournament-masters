@@ -18,13 +18,20 @@ const BR_TEAM_SIZES = [
   { value: 4, label: 'Squad (4 players)' },
 ];
 
-function getBrPlayersPerMatchOptions(gameId) {
-  if (gameId === 'bgmi') return [100];
-  return [20, 32, 48];
+// BGMI BR: max_slots is fixed per team size — no players_per_match dropdown needed
+// Solo=100 slots, Duo=50 slots, Squad=25 slots
+function getBgmiBrMaxSlots(teamSize) {
+  const t = Number(teamSize);
+  if (t === 1) return 100;
+  if (t === 2) return 50;
+  if (t >= 4) return 25;
+  return '';
 }
 
-const CS_ROUNDS = [5, 7, 11, 13];
-const LW_ROUNDS = [9, 11, 13];
+// Free Fire BR: players_per_match is selectable
+function getFfBrPlayersPerMatchOptions() {
+  return [20, 32, 48];
+}
 
 function calcMaxSlots(playersPerMatch, teamSize) {
   const p = Number(playersPerMatch);
@@ -32,6 +39,9 @@ function calcMaxSlots(playersPerMatch, teamSize) {
   if (!p || !t) return '';
   return Math.floor(p / t);
 }
+
+const CS_ROUNDS = [5, 7, 11, 13];
+const LW_ROUNDS = [9, 11, 13];
 
 const emptyForm = {
   id: null,
@@ -62,7 +72,7 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   const MAPS = getMapsForGame(gameId);
   const TDM_MAPS = getMapsForGame(gameId, 'tdm');
   const MODES = getModesForGame(gameId);
-  const BR_PLAYERS_PER_MATCH = getBrPlayersPerMatchOptions(gameId);
+  const isBgmi = gameId === 'bgmi';
 
   const [form, setForm] = React.useState(initial || emptyForm);
   const [saving, setSaving] = React.useState(false);
@@ -75,7 +85,7 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
 
   // Auto-fill TDM defaults when mode switches to TDM
   React.useEffect(() => {
-    if (form.mode === 'tdm' && gameId === 'bgmi') {
+    if (form.mode === 'tdm' && isBgmi) {
       setForm((f) => ({
         ...f,
         tdm_map: f.tdm_map || 'Warehouse',
@@ -85,18 +95,34 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
         team_size: 4,
       }));
     }
-  }, [form.mode, gameId]);
+  }, [form.mode, isBgmi]);
+
+  // BGMI BR: auto-set max_slots whenever team_size changes
+  React.useEffect(() => {
+    if (form.mode === 'br' && isBgmi) {
+      const slots = getBgmiBrMaxSlots(form.team_size);
+      if (slots && String(slots) !== String(form.max_slots)) {
+        setForm((f) => ({ ...f, max_slots: slots }));
+      }
+    }
+  }, [form.team_size, form.mode, isBgmi]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm((f) => {
       const updated = { ...f, [name]: type === 'checkbox' ? checked : value };
 
-      if (updated.mode === 'br' && (name === 'team_size' || name === 'players_per_match')) {
+      // Free Fire BR: calculate max_slots from players_per_match + team_size
+      if (!isBgmi && updated.mode === 'br' && (name === 'team_size' || name === 'players_per_match')) {
         updated.max_slots = calcMaxSlots(
           name === 'players_per_match' ? value : f.players_per_match,
           name === 'team_size' ? value : f.team_size,
         );
+      }
+
+      // BGMI BR: auto-set max_slots from team_size
+      if (isBgmi && updated.mode === 'br' && name === 'team_size') {
+        updated.max_slots = getBgmiBrMaxSlots(value);
       }
 
       if (updated.mode === 'br' && name === 'team_size') {
@@ -115,14 +141,18 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           updated.format_label = '4v4';
           updated.max_slots = 2;
           updated.team_size = 4;
-          if (gameId === 'bgmi') {
+          if (isBgmi) {
             updated.tdm_map = updated.tdm_map || 'Warehouse';
             updated.kill_target = updated.kill_target || BGMI_TDM_KILL_TARGET;
           }
         } else if (value === 'br') {
-          updated.max_slots = calcMaxSlots(updated.players_per_match, updated.team_size);
           updated.tdm_map = '';
           updated.kill_target = '';
+          if (isBgmi) {
+            updated.max_slots = getBgmiBrMaxSlots(updated.team_size);
+          } else {
+            updated.max_slots = calcMaxSlots(updated.players_per_match, updated.team_size);
+          }
         }
       }
 
@@ -145,14 +175,14 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
     const start = new Date(form.match_start_time);
     if (closing >= start) return 'Entry closing time must be before match start time.';
     if (form.mode === 'br') {
-      if (!form.players_per_match) return 'Select players per match for BR.';
       if (!form.team_size) return 'Select team size for BR.';
+      if (!isBgmi && !form.players_per_match) return 'Select players per match for BR.';
       const maxSlots = Number(form.max_slots || 0);
       const baseKey =
         Number(form.team_size) === 1 ? 'solo' :
         Number(form.team_size) === 2 ? 'duo'  : 'squad';
       const specificKey =
-        gameId === 'bgmi' ? `bgmi_${baseKey}` :
+        isBgmi ? `bgmi_${baseKey}` :
         gameId === 'free_fire' ? `ff_${baseKey}` :
         baseKey;
       const allowed = BR_SLOT_OPTIONS[specificKey] ?? BR_SLOT_OPTIONS[baseKey] ?? [];
@@ -196,7 +226,8 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
       registration_status: form.registration_status,
       is_archived: false,
       team_size: Number(form.team_size) || 1,
-      players_per_match: isBR ? Number(form.players_per_match) || null : null,
+      // players_per_match: only stored for Free Fire BR
+      players_per_match: (isBR && !isBgmi) ? Number(form.players_per_match) || null : null,
       total_rounds: isCS || isLW || isTDM ? Number(form.total_rounds) || null : null,
     };
 
@@ -272,27 +303,42 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
             </select>
           </div>
 
-          {/* BR: Team size + Players per match */}
+          {/* BR: Team size */}
           {isBR && (
-            <>
-              <div>
-                <label className="label" htmlFor="team_size">Team size</label>
-                <select id="team_size" name="team_size" className="input" value={form.team_size} onChange={handleChange}>
-                  {BR_TEAM_SIZES.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label" htmlFor="players_per_match">Players per match</label>
-                <select id="players_per_match" name="players_per_match" className="input" value={form.players_per_match} onChange={handleChange}>
-                  <option value="">Select</option>
-                  {BR_PLAYERS_PER_MATCH.map((n) => (
-                    <option key={n} value={n}>{n} players</option>
-                  ))}
-                </select>
-              </div>
-            </>
+            <div>
+              <label className="label" htmlFor="team_size">Team size</label>
+              <select id="team_size" name="team_size" className="input" value={form.team_size} onChange={handleChange}>
+                {BR_TEAM_SIZES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* BR: Players per match — Free Fire only */}
+          {isBR && !isBgmi && (
+            <div>
+              <label className="label" htmlFor="players_per_match">Players per match</label>
+              <select id="players_per_match" name="players_per_match" className="input" value={form.players_per_match} onChange={handleChange}>
+                <option value="">Select</option>
+                {getFfBrPlayersPerMatchOptions().map((n) => (
+                  <option key={n} value={n}>{n} players</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* BR: BGMI auto-slots info pill */}
+          {isBR && isBgmi && (
+            <div className="flex items-center gap-2 rounded-lg bg-sky-900/20 border border-sky-800/40 px-3 py-2 text-[11px] text-sky-300">
+              <span>🎯</span>
+              <span>
+                BGMI BR slots are fixed:&nbsp;
+                <strong>Solo = 100</strong>,&nbsp;
+                <strong>Duo = 50</strong>,&nbsp;
+                <strong>Squad = 25</strong>
+              </span>
+            </div>
           )}
 
           {/* CS rounds */}
@@ -402,10 +448,11 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
             <input id="entry_fee" name="entry_fee" type="number" className="input" value={form.entry_fee} onChange={handleChange} />
           </div>
 
-          {/* Max slots — locked for TDM/CS/LW */}
+          {/* Max slots */}
           <div>
             <label className="label" htmlFor="max_slots">
-              Max slots{isBR ? ' (auto-calculated)' : ' (locked to 2)'}
+              Max slots
+              {isBR && isBgmi ? ' (auto from team size)' : isBR ? ' (auto-calculated)' : ' (locked to 2)'}
             </label>
             <input
               id="max_slots"
@@ -414,7 +461,7 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               className="input"
               value={form.max_slots}
               onChange={handleChange}
-              readOnly={isCS || isLW || isTDM}
+              readOnly={isCS || isLW || isTDM || (isBR && isBgmi)}
             />
           </div>
 
