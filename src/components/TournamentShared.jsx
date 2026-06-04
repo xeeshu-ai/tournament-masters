@@ -122,6 +122,63 @@ export function SingleTournamentRow({ t, gameId, onEdit, onArchive, onDelete, na
   );
 }
 
+// ── Long Tournament Card ────────────────────────────────────────────────────
+export function LongTournamentCard({ t, gameId, onEdit, onArchive, onDelete, navigate, detailPath }) {
+  return (
+    <div className="card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Left — title + meta */}
+      <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          className="text-sm font-semibold text-slate-100 hover:text-violet-300 transition-colors text-left truncate max-w-full"
+          onClick={() => navigate(detailPath)}
+        >
+          {t.title}
+        </button>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+          <span className="uppercase">{t.mode}</span>
+          {t.format_label && <span>{t.format_label}</span>}
+          {t.map && <span>{t.map}</span>}
+          <span>{t.entry_fee ? `₹${t.entry_fee}` : 'Free'}</span>
+          <span>{t.max_slots ?? '—'} slots</span>
+          <span className="whitespace-nowrap">{fmtDate(t.start_time)}</span>
+        </div>
+      </div>
+
+      {/* Right — badge + actions */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${REG_BADGE[t.registration_status] ?? 'bg-slate-700 text-slate-300'}`}>
+          {t.registration_status}
+        </span>
+        <button
+          className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
+          onClick={() => navigate(detailPath)}
+        >
+          Manage
+        </button>
+        <button
+          className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
+          onClick={() => onEdit(t)}
+        >
+          Edit
+        </button>
+        <button
+          className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors"
+          onClick={() => onArchive(t)}
+        >
+          Archive
+        </button>
+        <button
+          className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          onClick={() => onDelete(t)}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Archived Section ────────────────────────────────────────────────────────────
 export function ArchivedSection({ archived, onDelete }) {
   const [open, setOpen] = React.useState(false);
