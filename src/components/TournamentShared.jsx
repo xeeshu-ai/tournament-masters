@@ -13,17 +13,14 @@ const BR_TEAM_SIZES = [
   { value: 4, label: 'Squad (4 players)' },
 ];
 
-// BGMI BR is always 100 players per match
 const BGMI_BR_PLAYERS = 100;
-
 const FF_BR_PLAYERS_PER_MATCH = [20, 32, 48];
 const CS_ROUNDS = [5, 7, 11, 13];
 const LW_ROUNDS = [9, 11, 13];
 
-// BR slot options per game+teamSize
 const BR_MAX_SLOTS = {
   bgmi: { 1: 100, 2: 50, 4: 25 },
-  free_fire: {},  // dynamic: players_per_match / team_size
+  free_fire: {},
 };
 
 export function calcMaxSlots(playersPerMatch, teamSize) {
@@ -60,6 +57,127 @@ function getBgmiBrSlots(teamSize) {
   return BR_MAX_SLOTS.bgmi[Number(teamSize)] || '';
 }
 
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+const REG_BADGE = {
+  open:   'bg-emerald-500/15 text-emerald-400',
+  closed: 'bg-slate-500/20 text-slate-400',
+  full:   'bg-amber-500/15 text-amber-400',
+};
+
+// ── Single Tournament Row ──────────────────────────────────────────────────
+export function SingleTournamentRow({ t, gameId, onEdit, onArchive, onDelete, navigate, detailPath }) {
+  return (
+    <tr className="hover:bg-slate-800/40 transition-colors">
+      <td
+        className="font-medium text-slate-100 cursor-pointer hover:text-sky-400 transition-colors"
+        onClick={() => navigate(detailPath)}
+      >
+        {t.title}
+      </td>
+      <td className="uppercase text-slate-400">{t.mode}</td>
+      <td className="text-slate-400">{t.format_label || '—'}</td>
+      <td className="text-slate-300">{t.entry_fee ? `₹${t.entry_fee}` : 'Free'}</td>
+      <td className="text-slate-400">{t.max_slots ?? '—'}</td>
+      <td>
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${REG_BADGE[t.registration_status] ?? 'bg-slate-700 text-slate-300'}`}>
+          {t.registration_status}
+        </span>
+      </td>
+      <td className="text-slate-400 text-[11px] whitespace-nowrap">{fmtDate(t.start_time)}</td>
+      <td>
+        <div className="flex items-center gap-1 justify-end">
+          <button
+            className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
+            onClick={() => navigate(detailPath)}
+          >
+            Manage
+          </button>
+          <button
+            className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-slate-100 hover:bg-slate-700 transition-colors"
+            onClick={() => onEdit(t)}
+          >
+            Edit
+          </button>
+          <button
+            className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors"
+            onClick={() => onArchive(t)}
+          >
+            Archive
+          </button>
+          <button
+            className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            onClick={() => onDelete(t)}
+          >
+            Delete
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ── Archived Section ────────────────────────────────────────────────────────────
+export function ArchivedSection({ archived, onDelete }) {
+  const [open, setOpen] = React.useState(false);
+  if (!archived || archived.length === 0) return null;
+  return (
+    <div className="card">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-xs text-slate-400 hover:text-slate-200 transition-colors"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="font-medium">
+          Archived ({archived.length})
+        </span>
+        <svg
+          width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2"
+          className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Title</th><th>Mode</th><th>Format</th><th>Start</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {archived.map((t) => (
+                <tr key={t.id} className="opacity-60 hover:opacity-100 transition-opacity">
+                  <td className="font-medium text-slate-300">{t.title}</td>
+                  <td className="uppercase text-slate-400">{t.mode}</td>
+                  <td className="text-slate-400">{t.format_label || '—'}</td>
+                  <td className="text-slate-400 text-[11px] whitespace-nowrap">{fmtDate(t.start_time)}</td>
+                  <td>
+                    <button
+                      className="rounded px-2 py-1 text-[11px] text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      onClick={() => onDelete(t)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tournament Form Modal ─────────────────────────────────────────────────────
 export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   const isBgmi = gameId === 'bgmi';
@@ -81,7 +199,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
     setForm((f) => {
       const updated = { ...f, [name]: type === 'checkbox' ? checked : value };
 
-      // When mode changes, reset map
       if (name === 'mode') {
         updated.map = '';
         if (value === 'cs') {
@@ -94,7 +211,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           updated.format_label = '4v4';
           updated.max_slots = 2;
           updated.team_size = 4;
-          // BGMI TDM kill target is always 40 — auto-fill
           if (isBgmi) updated.total_rounds = BGMI_TDM_KILL_TARGET;
         } else if (value === 'br') {
           if (isBgmi) {
@@ -106,7 +222,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
         }
       }
 
-      // BR team size change
       if (updated.mode === 'br' && name === 'team_size') {
         const size = Number(value);
         updated.format_label = size === 1 ? 'Solo' : size === 2 ? 'Duo' : 'Squad';
@@ -118,7 +233,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
         }
       }
 
-      // FF BR players_per_match change
       if (updated.mode === 'br' && name === 'players_per_match' && !isBgmi) {
         updated.max_slots = calcMaxSlots(value, f.team_size);
       }
@@ -183,7 +297,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
       is_archived: false,
       team_size: Number(form.team_size) || 1,
       players_per_match: ppm,
-      // For BGMI TDM: total_rounds stores the kill target (40). For CS/LW: stores actual rounds.
       total_rounds: isCS || isLW || isTDM ? Number(form.total_rounds) || null : null,
     };
     let result;
@@ -211,11 +324,9 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4">
-      {/* Modal container — fixed height, internal scroll */}
       <div className="card w-full max-w-2xl flex flex-col text-xs text-slate-300"
            style={{ maxHeight: 'min(90vh, 760px)' }}>
 
-        {/* ── Sticky Header ── */}
         <div className="flex items-center justify-between flex-shrink-0 pb-3 border-b border-slate-700">
           <h2 className="text-sm font-semibold text-slate-100">
             {form.id ? 'Edit Tournament' : 'New Tournament'}
@@ -232,17 +343,14 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           </button>
         </div>
 
-        {/* ── Scrollable Body ── */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="overflow-y-auto flex-1 space-y-3 py-3 pr-1">
 
-            {/* Title */}
             <div>
               <label className="label">Title</label>
               <input name="title" className="input" value={form.title} onChange={handleChange} required />
             </div>
 
-            {/* Type + Mode */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Type</label>
@@ -261,7 +369,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </div>
             </div>
 
-            {/* BR-specific */}
             {isBR && (
               <>
                 <div className="grid grid-cols-2 gap-3">
@@ -276,12 +383,9 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
                   <div>
                     <label className="label">Max slots (auto)</label>
                     <input
-                      name="max_slots"
-                      type="number"
+                      name="max_slots" type="number"
                       className="input bg-slate-800/50 cursor-not-allowed"
-                      value={form.max_slots}
-                      readOnly
-                      tabIndex={-1}
+                      value={form.max_slots} readOnly tabIndex={-1}
                     />
                   </div>
                 </div>
@@ -313,20 +417,15 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </>
             )}
 
-            {/* TDM specific */}
             {isTDM && (
               <div className="grid grid-cols-2 gap-3">
-                {/* BGMI TDM: fixed kill target = 40; FF TDM (future): rounds dropdown */}
                 {isBgmi ? (
                   <div>
                     <label className="label">Kill target (fixed)</label>
                     <input
-                      name="total_rounds"
-                      type="number"
+                      name="total_rounds" type="number"
                       className="input bg-slate-800/50 cursor-not-allowed"
-                      value={BGMI_TDM_KILL_TARGET}
-                      readOnly
-                      tabIndex={-1}
+                      value={BGMI_TDM_KILL_TARGET} readOnly tabIndex={-1}
                     />
                     <p className="text-[11px] text-slate-500 mt-1">BGMI TDM: first team to 40 kills wins</p>
                   </div>
@@ -353,7 +452,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </div>
             )}
 
-            {/* CS/LW specific */}
             {(isCS || isLW) && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -378,7 +476,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </div>
             )}
 
-            {/* LW team size */}
             {isLW && (
               <div>
                 <label className="label">LW format</label>
@@ -389,18 +486,11 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </div>
             )}
 
-            {/* Slots + Fee */}
             <div className="grid grid-cols-2 gap-3">
               {!isBR && (
                 <div>
                   <label className="label">Max slots</label>
-                  <input
-                    name="max_slots"
-                    type="number"
-                    className="input"
-                    value={form.max_slots}
-                    onChange={handleChange}
-                  />
+                  <input name="max_slots" type="number" className="input" value={form.max_slots} onChange={handleChange} />
                 </div>
               )}
               <div className={!isBR ? '' : 'col-span-2'}>
@@ -409,7 +499,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </div>
             </div>
 
-            {/* Times */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Entry closing time</label>
@@ -421,7 +510,6 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </div>
             </div>
 
-            {/* Registration status */}
             <div>
               <label className="label">Registration status</label>
               <select name="registration_status" className="input" value={form.registration_status} onChange={handleChange}>
@@ -431,32 +519,30 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </select>
             </div>
 
-            {/* YouTube */}
             <div>
               <label className="label">YouTube live URL (optional)</label>
               <input name="youtube_live_url" type="url" className="input" value={form.youtube_live_url} onChange={handleChange} placeholder="https://youtu.be/…" />
             </div>
 
-            {/* Prize text */}
             <div>
               <label className="label">Prize / distribution text</label>
               <textarea name="prize_text" rows={2} className="input resize-none" value={form.prize_text} onChange={handleChange} />
             </div>
 
-            {/* Points table */}
             <div>
               <label className="label">Points table (optional)</label>
               <textarea name="points_table" rows={2} className="input resize-none" value={form.points_table} onChange={handleChange} />
             </div>
 
-          </div>{/* end scroll area */}
+          </div>
 
-          {/* ── Sticky Footer ── */}
           <div className="flex-shrink-0 pt-3 border-t border-slate-700 space-y-2">
             {error && <p className="rounded bg-red-500/10 px-3 py-2 text-red-400">{error}</p>}
             <div className="flex justify-end gap-2">
               <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save changes' : 'Create tournament'}</button>
+              <button type="submit" className="btn-primary" disabled={saving}>
+                {saving ? 'Saving…' : form.id ? 'Save changes' : 'Create tournament'}
+              </button>
             </div>
           </div>
         </form>
