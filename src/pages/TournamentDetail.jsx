@@ -15,7 +15,6 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
   const notify = (msg, type = 'success') => { setToastMsg({ msg, type }); setTimeout(() => setToastMsg(null), 3000); };
 
   React.useEffect(() => {
-    // FIX: read from single_br_results (array), not cs_lw_results.br_rows
     const existing = Array.isArray(tournament.single_br_results) ? tournament.single_br_results : [];
     setRows(
       joinedTeams.map((t) => {
@@ -48,7 +47,6 @@ function BrResultsPanel({ tournament, registrations, onSaved }) {
 
   const save = async () => {
     setSaving(true);
-    // FIX: save as sorted array to single_br_results so public app can read it
     const resultArray = [...rows]
       .filter((r) => r.position !== '')
       .sort((a, b) => Number(b.points) - Number(a.points))
@@ -587,7 +585,12 @@ export function TournamentDetailPage() {
     if (tErr) { notify('Failed to load tournament.', 'error'); setLoading(false); return; }
     setTournament(tData || null);
 
-    // FIX: fetch registrations WITHOUT nested join to avoid silent FK name mismatch
+    // Redirect single-type tournaments to the dedicated SingleTournamentDetail page
+    if (tData?.type === 'single') {
+      navigate(`/${gameId}/single-tournaments/${tournamentId}`, { replace: true });
+      return;
+    }
+
     const { data: rData, error: rErr } = await supabaseAdmin
       .from('tournament_registrations')
       .select('id, tournament_id, host_uid, host_player_id, team_name, team_members_summary, status, created_at, razorpay_order_id, payment_id, slot_reserved_at')
@@ -597,7 +600,6 @@ export function TournamentDetailPage() {
     if (rErr) console.error('Registrations fetch error:', rErr);
     const regs = rData || [];
 
-    // FIX: fetch registration_members separately
     const regIds = regs.map((r) => r.id);
     let membersByReg = {};
     if (regIds.length > 0) {
