@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../supabaseClient';
 import {
   BR_SLOT_OPTIONS,
   TDM_ROUNDS,
+  BGMI_TDM_KILL_TARGET,
   TOURNAMENT_TYPES,
   getMapsForGame,
   getModesForGame,
@@ -18,11 +19,7 @@ const BR_TEAM_SIZES = [
 ];
 
 function getBrPlayersPerMatchOptions(gameId) {
-  if (gameId === 'bgmi') {
-    // BGMI BR: 100 players per match
-    return [100];
-  }
-  // Free Fire BR: typical 20/32/48 lobbies
+  if (gameId === 'bgmi') return [100];
   return [20, 32, 48];
 }
 
@@ -43,6 +40,8 @@ const emptyForm = {
   mode: 'br',
   format_label: '',
   map: '',
+  tdm_map: '',
+  kill_target: '',
   skills_on: false,
   limited_ammo: false,
   lw_format: '',
@@ -61,6 +60,7 @@ const emptyForm = {
 
 function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   const MAPS = getMapsForGame(gameId);
+  const TDM_MAPS = getMapsForGame(gameId, 'tdm');
   const MODES = getModesForGame(gameId);
   const BR_PLAYERS_PER_MATCH = getBrPlayersPerMatchOptions(gameId);
 
@@ -72,6 +72,20 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
     setForm(initial || emptyForm);
     setError('');
   }, [initial, open]);
+
+  // Auto-fill TDM defaults when mode switches to TDM
+  React.useEffect(() => {
+    if (form.mode === 'tdm' && gameId === 'bgmi') {
+      setForm((f) => ({
+        ...f,
+        tdm_map: f.tdm_map || 'Warehouse',
+        kill_target: f.kill_target || BGMI_TDM_KILL_TARGET,
+        format_label: '4v4',
+        max_slots: 2,
+        team_size: 4,
+      }));
+    }
+  }, [form.mode, gameId]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -101,8 +115,14 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           updated.format_label = '4v4';
           updated.max_slots = 2;
           updated.team_size = 4;
+          if (gameId === 'bgmi') {
+            updated.tdm_map = updated.tdm_map || 'Warehouse';
+            updated.kill_target = updated.kill_target || BGMI_TDM_KILL_TARGET;
+          }
         } else if (value === 'br') {
           updated.max_slots = calcMaxSlots(updated.players_per_match, updated.team_size);
+          updated.tdm_map = '';
+          updated.kill_target = '';
         }
       }
 
@@ -146,16 +166,13 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const v = validate();
-    if (v) {
-      setError(v);
-      return;
-    }
+    if (v) { setError(v); return; }
     setSaving(true);
     setError('');
 
-    const isBR = form.mode === 'br';
-    const isCS = form.mode === 'cs';
-    const isLW = form.mode === 'lw';
+    const isBR  = form.mode === 'br';
+    const isCS  = form.mode === 'cs';
+    const isLW  = form.mode === 'lw';
     const isTDM = form.mode === 'tdm';
 
     const payload = {
@@ -164,6 +181,8 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
       mode: form.mode,
       format_label: form.format_label,
       map: isBR ? form.map : null,
+      tdm_map: isTDM ? (form.tdm_map || 'Warehouse') : null,
+      kill_target: isTDM ? (Number(form.kill_target) || BGMI_TDM_KILL_TARGET) : null,
       skills_on: isCS || isLW ? form.skills_on : false,
       limited_ammo: isCS || isLW ? form.limited_ammo : false,
       lw_format: isLW ? form.lw_format : null,
@@ -201,9 +220,9 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
 
   if (!open) return null;
 
-  const isBR = form.mode === 'br';
-  const isCS = form.mode === 'cs';
-  const isLW = form.mode === 'lw';
+  const isBR  = form.mode === 'br';
+  const isCS  = form.mode === 'cs';
+  const isLW  = form.mode === 'lw';
   const isTDM = form.mode === 'tdm';
   const isLong = form.type === 'long';
 
@@ -237,25 +256,18 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
         <form onSubmit={handleSubmit} className="grid gap-3 md:grid-cols-2">
           {/* Title */}
           <div className="md:col-span-2">
-            <label className="label" htmlFor="title">
-              Title
-            </label>
+            <label className="label" htmlFor="title">Title</label>
             <input id="title" name="title" className="input" value={form.title} onChange={handleChange} required />
           </div>
 
-          {/* Type — hidden, locked to what section opened the form */}
           <input type="hidden" name="type" value={form.type} />
 
-          {/* Mode — game-aware */}
+          {/* Mode */}
           <div>
-            <label className="label" htmlFor="mode">
-              Mode
-            </label>
+            <label className="label" htmlFor="mode">Mode</label>
             <select id="mode" name="mode" className="input" value={form.mode} onChange={handleChange}>
               {MODES.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
+                <option key={m.id} value={m.id}>{m.label}</option>
               ))}
             </select>
           </div>
@@ -264,33 +276,19 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           {isBR && (
             <>
               <div>
-                <label className="label" htmlFor="team_size">
-                  Team size
-                </label>
+                <label className="label" htmlFor="team_size">Team size</label>
                 <select id="team_size" name="team_size" className="input" value={form.team_size} onChange={handleChange}>
                   {BR_TEAM_SIZES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
+                    <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="label" htmlFor="players_per_match">
-                  Players per match
-                </label>
-                <select
-                  id="players_per_match"
-                  name="players_per_match"
-                  className="input"
-                  value={form.players_per_match}
-                  onChange={handleChange}
-                >
+                <label className="label" htmlFor="players_per_match">Players per match</label>
+                <select id="players_per_match" name="players_per_match" className="input" value={form.players_per_match} onChange={handleChange}>
                   <option value="">Select</option>
                   {BR_PLAYERS_PER_MATCH.map((n) => (
-                    <option key={n} value={n}>
-                      {n} players
-                    </option>
+                    <option key={n} value={n}>{n} players</option>
                   ))}
                 </select>
               </div>
@@ -300,22 +298,10 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           {/* CS rounds */}
           {isCS && (
             <div>
-              <label className="label" htmlFor="total_rounds">
-                Total rounds
-              </label>
-              <select
-                id="total_rounds"
-                name="total_rounds"
-                className="input"
-                value={form.total_rounds}
-                onChange={handleChange}
-              >
+              <label className="label" htmlFor="total_rounds">Total rounds</label>
+              <select id="total_rounds" name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
                 <option value="">Select</option>
-                {CS_ROUNDS.map((r) => (
-                  <option key={r} value={r}>
-                    {r} rounds
-                  </option>
-                ))}
+                {CS_ROUNDS.map((r) => <option key={r} value={r}>{r} rounds</option>)}
               </select>
             </div>
           )}
@@ -324,37 +310,23 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           {isLW && (
             <>
               <div>
-                <label className="label" htmlFor="team_size">
-                  Team size
-                </label>
+                <label className="label" htmlFor="team_size">Team size</label>
                 <select id="team_size" name="team_size" className="input" value={form.team_size} onChange={handleChange}>
                   <option value={1}>Solo (1v1)</option>
                   <option value={2}>Duo (2v2)</option>
                 </select>
               </div>
               <div>
-                <label className="label" htmlFor="total_rounds">
-                  Total rounds
-                </label>
-                <select
-                  id="total_rounds"
-                  name="total_rounds"
-                  className="input"
-                  value={form.total_rounds}
-                  onChange={handleChange}
-                >
+                <label className="label" htmlFor="total_rounds">Total rounds</label>
+                <select id="total_rounds" name="total_rounds" className="input" value={form.total_rounds} onChange={handleChange}>
                   <option value="">Select</option>
-                  {LW_ROUNDS.map((r) => (
-                    <option key={r} value={r}>
-                      {r} rounds
-                    </option>
-                  ))}
+                  {LW_ROUNDS.map((r) => <option key={r} value={r}>{r} rounds</option>)}
                 </select>
               </div>
             </>
           )}
 
-          {/* TDM (BGMI): fixed 4v4, rounds */}
+          {/* TDM: fixed 4v4, map, kill target — NO rounds for BGMI TDM */}
           {isTDM && (
             <>
               <div>
@@ -362,58 +334,50 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
                 <input className="input" value="4v4 (fixed)" disabled />
               </div>
               <div>
-                <label className="label" htmlFor="total_rounds">
-                  Total rounds
-                </label>
-                <select
-                  id="total_rounds"
-                  name="total_rounds"
-                  className="input"
-                  value={form.total_rounds}
-                  onChange={handleChange}
-                >
-                  <option value="">Select</option>
-                  {TDM_ROUNDS.map((r) => (
-                    <option key={r} value={r}>
-                      {r} rounds
-                    </option>
-                  ))}
+                <label className="label">Slots</label>
+                <input className="input" value="2 (fixed)" disabled />
+              </div>
+              <div>
+                <label className="label" htmlFor="tdm_map">Map</label>
+                <select id="tdm_map" name="tdm_map" className="input" value={form.tdm_map} onChange={handleChange}>
+                  {TDM_MAPS.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="kill_target">Kill target (first to X kills wins)</label>
+                <input
+                  id="kill_target"
+                  name="kill_target"
+                  type="number"
+                  className="input"
+                  value={form.kill_target}
+                  onChange={handleChange}
+                />
               </div>
             </>
           )}
 
           {/* Format label */}
           <div>
-            <label className="label" htmlFor="format_label">
-              Format label
-            </label>
+            <label className="label" htmlFor="format_label">Format label</label>
             <input
               id="format_label"
               name="format_label"
               className="input"
-              placeholder={
-                isBR ? 'Auto-filled from team size' : isCS || isTDM ? '4v4' : '1v1 / 2v2'
-              }
+              placeholder={isBR ? 'Auto-filled from team size' : isCS || isTDM ? '4v4' : '1v1 / 2v2'}
               value={form.format_label}
               onChange={handleChange}
               required
             />
           </div>
 
-          {/* BR: Map — game-aware */}
+          {/* BR: Map */}
           {isBR && (
             <div>
-              <label className="label" htmlFor="map">
-                Map
-              </label>
+              <label className="label" htmlFor="map">Map</label>
               <select id="map" name="map" className="input" value={form.map} onChange={handleChange}>
                 <option value="">Select map</option>
-                {MAPS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
+                {MAPS.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
           )}
@@ -422,23 +386,11 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           {(isCS || isLW) && (
             <div className="flex items-center gap-4 pt-5">
               <label className="inline-flex items-center gap-2 text-11px text-slate-200">
-                <input
-                  type="checkbox"
-                  name="skills_on"
-                  checked={form.skills_on}
-                  onChange={handleChange}
-                  className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500"
-                />
+                <input type="checkbox" name="skills_on" checked={form.skills_on} onChange={handleChange} className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500" />
                 Skills on
               </label>
               <label className="inline-flex items-center gap-2 text-11px text-slate-200">
-                <input
-                  type="checkbox"
-                  name="limited_ammo"
-                  checked={form.limited_ammo}
-                  onChange={handleChange}
-                  className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500"
-                />
+                <input type="checkbox" name="limited_ammo" checked={form.limited_ammo} onChange={handleChange} className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500" />
                 Limited ammo
               </label>
             </div>
@@ -446,20 +398,11 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
 
           {/* Entry fee */}
           <div>
-            <label className="label" htmlFor="entry_fee">
-              Entry fee
-            </label>
-            <input
-              id="entry_fee"
-              name="entry_fee"
-              type="number"
-              className="input"
-              value={form.entry_fee}
-              onChange={handleChange}
-            />
+            <label className="label" htmlFor="entry_fee">Entry fee</label>
+            <input id="entry_fee" name="entry_fee" type="number" className="input" value={form.entry_fee} onChange={handleChange} />
           </div>
 
-          {/* Max slots */}
+          {/* Max slots — locked for TDM/CS/LW */}
           <div>
             <label className="label" htmlFor="max_slots">
               Max slots{isBR ? ' (auto-calculated)' : ' (locked to 2)'}
@@ -477,90 +420,36 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
 
           {/* Prize */}
           <div className="md:col-span-2">
-            <label className="label" htmlFor="prize_text">
-              Prize distribution (free text)
-            </label>
-            <textarea
-              id="prize_text"
-              name="prize_text"
-              rows={3}
-              className="input resize-none"
-              value={form.prize_text}
-              onChange={handleChange}
-            />
+            <label className="label" htmlFor="prize_text">Prize distribution (free text)</label>
+            <textarea id="prize_text" name="prize_text" rows={3} className="input resize-none" value={form.prize_text} onChange={handleChange} />
           </div>
 
           {/* Points table */}
           <div className="md:col-span-2">
-            <label className="label" htmlFor="points_table">
-              Points table (free text)
-            </label>
-            <textarea
-              id="points_table"
-              name="points_table"
-              rows={3}
-              className="input resize-none"
-              value={form.points_table}
-              onChange={handleChange}
-            />
+            <label className="label" htmlFor="points_table">Points table (free text)</label>
+            <textarea id="points_table" name="points_table" rows={3} className="input resize-none" value={form.points_table} onChange={handleChange} />
           </div>
 
           {/* Times */}
           <div>
-            <label className="label" htmlFor="entry_closing_time">
-              Entry closing time
-            </label>
-            <input
-              id="entry_closing_time"
-              name="entry_closing_time"
-              type="datetime-local"
-              className="input"
-              value={form.entry_closing_time}
-              onChange={handleChange}
-              required
-            />
+            <label className="label" htmlFor="entry_closing_time">Entry closing time</label>
+            <input id="entry_closing_time" name="entry_closing_time" type="datetime-local" className="input" value={form.entry_closing_time} onChange={handleChange} required />
           </div>
           <div>
-            <label className="label" htmlFor="match_start_time">
-              Match start time
-            </label>
-            <input
-              id="match_start_time"
-              name="match_start_time"
-              type="datetime-local"
-              className="input"
-              value={form.match_start_time}
-              onChange={handleChange}
-              required
-            />
+            <label className="label" htmlFor="match_start_time">Match start time</label>
+            <input id="match_start_time" name="match_start_time" type="datetime-local" className="input" value={form.match_start_time} onChange={handleChange} required />
           </div>
 
           {/* YouTube */}
           <div className="md:col-span-2">
-            <label className="label" htmlFor="youtube_live_url">
-              YouTube live URL
-            </label>
-            <input
-              id="youtube_live_url"
-              name="youtube_live_url"
-              className="input"
-              value={form.youtube_live_url}
-              onChange={handleChange}
-            />
+            <label className="label" htmlFor="youtube_live_url">YouTube live URL</label>
+            <input id="youtube_live_url" name="youtube_live_url" className="input" value={form.youtube_live_url} onChange={handleChange} />
           </div>
 
           {/* Registration status */}
           <div>
-            <label className="label" htmlFor="registration_status">
-              Registration status
-            </label>
-            <select
-              id="registration_status"
-              name="registration_status"
-              className="input"
-              value={form.registration_status}
-              onChange={handleChange}
-            >
+            <label className="label" htmlFor="registration_status">Registration status</label>
+            <select id="registration_status" name="registration_status" className="input" value={form.registration_status} onChange={handleChange}>
               <option value="open">Open</option>
               <option value="closed">Closed</option>
             </select>
@@ -569,9 +458,7 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
           {error && <div className="md:col-span-2 text-11px text-red-400">{error}</div>}
 
           <div className="md:col-span-2 flex justify-end gap-2 pt-1">
-            <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
+            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn-primary" disabled={saving}>
               {saving ? 'Saving…' : 'Save tournament'}
             </button>
@@ -594,7 +481,11 @@ function SingleTournamentRow({ t, gameId, onEdit, onArchive, onDelete, navigate 
       const size = Number(t.team_size) === 1 ? '1v1' : '2v2';
       return t.total_rounds ? `LW ${size} · ${t.total_rounds}R` : `LW ${size}`;
     }
-    if (t.mode === 'tdm') return t.total_rounds ? `TDM · ${t.total_rounds}R` : 'TDM';
+    if (t.mode === 'tdm') {
+      const mapLabel = t.tdm_map ? ` · ${t.tdm_map}` : '';
+      const killLabel = t.kill_target ? ` · First to ${t.kill_target}` : '';
+      return `4v4${mapLabel}${killLabel}`;
+    }
     return t.format_label || t.mode;
   };
 
@@ -602,52 +493,20 @@ function SingleTournamentRow({ t, gameId, onEdit, onArchive, onDelete, navigate 
     <tr>
       <td>{t.title}</td>
       <td>{t.mode?.toUpperCase()}</td>
-      <td>
-        <span className="badge">{formatBadge()}</span>
-      </td>
+      <td><span className="badge">{formatBadge()}</span></td>
       <td>{t.entry_fee ? `₹${Number(t.entry_fee).toLocaleString('en-IN')}` : 'Free'}</td>
+      <td>{t.filled_slots || 0}/{t.max_slots}</td>
       <td>
-        {t.filled_slots || 0}/{t.max_slots}
-      </td>
-      <td>
-        <span
-          className={
-            'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')
-          }
-        >
+        <span className={'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')}>
           {t.registration_status}
         </span>
       </td>
       <td>{t.start_time ? new Date(t.start_time).toLocaleString('en-IN') : '—'}</td>
       <td className="space-x-1.5 text-right whitespace-nowrap">
-        <button
-          type="button"
-          className="btn-secondary text-[11px]"
-          onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}
-        >
-          Open
-        </button>
-        <button
-          type="button"
-          className="btn-secondary text-[11px]"
-          onClick={() => onEdit(t)}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="btn-secondary text-[11px]"
-          onClick={() => onArchive(t)}
-        >
-          Archive
-        </button>
-        <button
-          type="button"
-          className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
-          onClick={() => onDelete(t)}
-        >
-          Delete
-        </button>
+        <button type="button" className="btn-secondary text-[11px]" onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}>Open</button>
+        <button type="button" className="btn-secondary text-[11px]" onClick={() => onEdit(t)}>Edit</button>
+        <button type="button" className="btn-secondary text-[11px]" onClick={() => onArchive(t)}>Archive</button>
+        <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => onDelete(t)}>Delete</button>
       </td>
     </tr>
   );
@@ -667,33 +526,25 @@ function LongTournamentCard({ t, gameId, onEdit, onArchive, onDelete, navigate }
       const size = Number(t.team_size) === 1 ? '1v1' : '2v2';
       return t.total_rounds ? `LW ${size} · ${t.total_rounds}R` : `LW ${size}`;
     }
+    if (t.mode === 'tdm') {
+      const mapLabel = t.tdm_map ? ` · ${t.tdm_map}` : '';
+      const killLabel = t.kill_target ? ` · First to ${t.kill_target}` : '';
+      return `TDM 4v4${mapLabel}${killLabel}`;
+    }
     return t.format_label || t.mode?.toUpperCase();
   };
 
   return (
     <div className="rounded-xl border border-violet-800/40 bg-slate-900/60 p-4 space-y-3">
-      {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-slate-50 leading-tight">{t.title}</h3>
           <div className="flex flex-wrap gap-1.5 text-[11px]">
-            <span className="badge bg-violet-900/60 text-violet-300 border border-violet-700/40">
-              {modeBadge()}
-            </span>
-            <span
-              className={
-                'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')
-              }
-            >
-              {t.registration_status}
-            </span>
-            <span className="badge bg-slate-800 text-slate-300">
-              {t.filled_slots || 0}/{t.max_slots} slots
-            </span>
+            <span className="badge bg-violet-900/60 text-violet-300 border border-violet-700/40">{modeBadge()}</span>
+            <span className={'status-pill ' + (t.registration_status === 'open' ? 'pending' : 'approved')}>{t.registration_status}</span>
+            <span className="badge bg-slate-800 text-slate-300">{t.filled_slots || 0}/{t.max_slots} slots</span>
             {t.entry_fee > 0 && (
-              <span className="badge bg-emerald-900/40 text-emerald-400 border border-emerald-800/40">
-                ₹{Number(t.entry_fee).toLocaleString('en-IN')}
-              </span>
+              <span className="badge bg-emerald-900/40 text-emerald-400 border border-emerald-800/40">₹{Number(t.entry_fee).toLocaleString('en-IN')}</span>
             )}
           </div>
         </div>
@@ -701,53 +552,15 @@ function LongTournamentCard({ t, gameId, onEdit, onArchive, onDelete, navigate }
           {t.start_time ? new Date(t.start_time).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
         </div>
       </div>
-
-      {/* Action row */}
       <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          className="btn-primary text-[11px] flex-1 min-w-[100px]"
-          onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}
-        >
-          Open tournament
-        </button>
+        <button type="button" className="btn-primary text-[11px] flex-1 min-w-[100px]" onClick={() => navigate(`/${gameId}/tournaments/${t.id}`)}>Open tournament</button>
         {hasBracket && (
-          <button
-            type="button"
-            className="btn-secondary text-[11px] flex-1 min-w-[120px] border-violet-700/50 text-violet-300 hover:bg-violet-900/30"
-            onClick={() => navigate(`/${gameId}/brackets?tournamentId=${t.id}`)}
-          >
-            Bracket manager
-          </button>
+          <button type="button" className="btn-secondary text-[11px] flex-1 min-w-[120px] border-violet-700/50 text-violet-300 hover:bg-violet-900/30" onClick={() => navigate(`/${gameId}/brackets?tournamentId=${t.id}`)}>Bracket manager</button>
         )}
-        <button
-          type="button"
-          className="btn-secondary text-[11px]"
-          onClick={() => navigate(`/${gameId}/results?tournamentId=${t.id}`)}
-        >
-          Results
-        </button>
-        <button
-          type="button"
-          className="btn-secondary text-[11px]"
-          onClick={() => onEdit(t)}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="btn-secondary text-[11px]"
-          onClick={() => onArchive(t)}
-        >
-          Archive
-        </button>
-        <button
-          type="button"
-          className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
-          onClick={() => onDelete(t)}
-        >
-          Delete
-        </button>
+        <button type="button" className="btn-secondary text-[11px]" onClick={() => navigate(`/${gameId}/results?tournamentId=${t.id}`)}>Results</button>
+        <button type="button" className="btn-secondary text-[11px]" onClick={() => onEdit(t)}>Edit</button>
+        <button type="button" className="btn-secondary text-[11px]" onClick={() => onArchive(t)}>Archive</button>
+        <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => onDelete(t)}>Delete</button>
       </div>
     </div>
   );
@@ -779,21 +592,14 @@ export function TournamentsPage() {
       .select('*')
       .eq('game_id', gameId)
       .order('start_time', { ascending: true });
-    if (error) {
-      console.error(error);
-      setLoading(false);
-      return;
-    }
+    if (error) { console.error(error); setLoading(false); return; }
     setTournaments((data || []).filter((t) => !t.is_archived));
     setArchived((data || []).filter((t) => t.is_archived));
     setLoading(false);
   };
 
-  React.useEffect(() => {
-    load();
-  }, [gameId]);
+  React.useEffect(() => { load(); }, [gameId]);
 
-  // Deep-link edit via ?editId=
   React.useEffect(() => {
     const editId = searchParams.get('editId');
     if (!editId || !tournaments.length) return;
@@ -806,26 +612,15 @@ export function TournamentsPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, tournaments, setSearchParams]);
 
-  const openCreate = (type) => {
-    setEditing({ ...emptyForm, type });
-    setFormOpen(true);
-  };
-
-  const openEdit = (t) => {
-    setEditing(t);
-    setFormOpen(true);
-  };
-
+  const openCreate = (type) => { setEditing({ ...emptyForm, type }); setFormOpen(true); };
+  const openEdit = (t) => { setEditing(t); setFormOpen(true); };
   const openArchive = (t) => setConfirmArchive({ open: true, id: t.id });
   const openDelete = (t) => setConfirmDelete({ open: true, id: t.id, title: t.title });
 
   const handleArchiveConfirmed = async () => {
     const { id } = confirmArchive;
     const { error } = await supabaseAdmin.from('tournaments').update({ is_archived: true }).eq('id', id);
-    if (error) {
-      notify('Failed to archive tournament.', 'error');
-      return;
-    }
+    if (error) { notify('Failed to archive tournament.', 'error'); return; }
     notify('Tournament archived.');
     setConfirmArchive({ open: false });
     load();
@@ -834,10 +629,7 @@ export function TournamentsPage() {
   const handleDeleteConfirmed = async () => {
     const { id } = confirmDelete;
     const { error } = await supabaseAdmin.from('tournaments').delete().eq('id', id);
-    if (error) {
-      notify('Failed to delete tournament.', 'error');
-      return;
-    }
+    if (error) { notify('Failed to delete tournament.', 'error'); return; }
     notify('Tournament deleted permanently.');
     setConfirmDelete({ open: false });
     load();
@@ -848,75 +640,39 @@ export function TournamentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page header — no global "New" button anymore */}
       <header>
         <h1 className="text-xl font-semibold text-slate-50">Tournaments</h1>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Manage single-match and long tournaments separately for this game.
-        </p>
+        <p className="text-xs text-slate-400 mt-0.5">Manage single-match and long tournaments separately for this game.</p>
       </header>
 
-      {/* ── Single-match section ─────────────────────────────────────────── */}
+      {/* Single-match section */}
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            {/* Blue accent bar */}
             <span className="inline-block w-1 h-5 rounded-full bg-sky-500" />
             <div>
               <h2 className="text-sm font-semibold text-slate-100">Single-match tournaments</h2>
-              <p className="text-[11px] text-slate-500">
-                One match per tournament — BR, CS, LW, or TDM format.
-              </p>
+              <p className="text-[11px] text-slate-500">One match per tournament — BR, CS, LW, or TDM format.</p>
             </div>
           </div>
-          <button
-            type="button"
-            className="btn-primary text-xs shrink-0"
-            onClick={() => openCreate('single')}
-          >
-            + New single match
-          </button>
+          <button type="button" className="btn-primary text-xs shrink-0" onClick={() => openCreate('single')}>+ New single match</button>
         </div>
-
         <div className="card overflow-x-auto">
           {loading ? (
             <p className="text-xs text-slate-400">Loading…</p>
           ) : singleActive.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-xs text-slate-500">No single-match tournaments yet.</p>
-              <button
-                type="button"
-                className="mt-3 btn-secondary text-xs"
-                onClick={() => openCreate('single')}
-              >
-                Create your first one
-              </button>
+              <button type="button" className="mt-3 btn-secondary text-xs" onClick={() => openCreate('single')}>Create your first one</button>
             </div>
           ) : (
             <table className="table">
               <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Mode</th>
-                  <th>Format</th>
-                  <th>Entry</th>
-                  <th>Slots</th>
-                  <th>Reg</th>
-                  <th>Start</th>
-                  <th></th>
-                </tr>
+                <tr><th>Title</th><th>Mode</th><th>Format</th><th>Entry</th><th>Slots</th><th>Reg</th><th>Start</th><th></th></tr>
               </thead>
               <tbody>
                 {singleActive.map((t) => (
-                  <SingleTournamentRow
-                    key={t.id}
-                    t={t}
-                    gameId={gameId}
-                    onEdit={openEdit}
-                    onArchive={openArchive}
-                    onDelete={openDelete}
-                    navigate={navigate}
-                  />
+                  <SingleTournamentRow key={t.id} t={t} gameId={gameId} onEdit={openEdit} onArchive={openArchive} onDelete={openDelete} navigate={navigate} />
                 ))}
               </tbody>
             </table>
@@ -924,61 +680,35 @@ export function TournamentsPage() {
         </div>
       </section>
 
-      {/* ── Long tournaments section ─────────────────────────────────────── */}
+      {/* Long tournaments section */}
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            {/* Violet accent bar */}
             <span className="inline-block w-1 h-5 rounded-full bg-violet-500" />
             <div>
               <h2 className="text-sm font-semibold text-slate-100">Long tournaments</h2>
-              <p className="text-[11px] text-slate-500">
-                Multi-match, multi-team events — bracket manager and fixture generation included.
-              </p>
+              <p className="text-[11px] text-slate-500">Multi-match, multi-team events — bracket manager and fixture generation included.</p>
             </div>
           </div>
-          <button
-            type="button"
-            className="text-xs rounded-lg px-3 py-1.5 bg-violet-900/40 text-violet-300 border border-violet-700/50 hover:bg-violet-800/40 transition-colors shrink-0"
-            onClick={() => openCreate('long')}
-          >
-            + New long tournament
-          </button>
+          <button type="button" className="text-xs rounded-lg px-3 py-1.5 bg-violet-900/40 text-violet-300 border border-violet-700/50 hover:bg-violet-800/40 transition-colors shrink-0" onClick={() => openCreate('long')}>+ New long tournament</button>
         </div>
-
         <div className="space-y-2">
           {loading ? (
-            <div className="card">
-              <p className="text-xs text-slate-400">Loading…</p>
-            </div>
+            <div className="card"><p className="text-xs text-slate-400">Loading…</p></div>
           ) : longActive.length === 0 ? (
             <div className="card py-8 text-center border-violet-800/30">
               <p className="text-xs text-slate-500">No long tournaments yet.</p>
-              <button
-                type="button"
-                className="mt-3 text-xs rounded-lg px-3 py-1.5 bg-violet-900/40 text-violet-300 border border-violet-700/50 hover:bg-violet-800/40 transition-colors"
-                onClick={() => openCreate('long')}
-              >
-                Create your first one
-              </button>
+              <button type="button" className="mt-3 text-xs rounded-lg px-3 py-1.5 bg-violet-900/40 text-violet-300 border border-violet-700/50 hover:bg-violet-800/40 transition-colors" onClick={() => openCreate('long')}>Create your first one</button>
             </div>
           ) : (
             longActive.map((t) => (
-              <LongTournamentCard
-                key={t.id}
-                t={t}
-                gameId={gameId}
-                onEdit={openEdit}
-                onArchive={openArchive}
-                onDelete={openDelete}
-                navigate={navigate}
-              />
+              <LongTournamentCard key={t.id} t={t} gameId={gameId} onEdit={openEdit} onArchive={openArchive} onDelete={openDelete} navigate={navigate} />
             ))
           )}
         </div>
       </section>
 
-      {/* ── Archived ─────────────────────────────────────────────────────── */}
+      {/* Archived */}
       {archived.length > 0 && (
         <section className="space-y-2">
           <details>
@@ -988,40 +718,21 @@ export function TournamentsPage() {
             <div className="mt-2 card overflow-x-auto">
               <table className="table">
                 <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>Type</th>
-                    <th>Mode</th>
-                    <th>Start</th>
-                    <th></th>
-                  </tr>
+                  <tr><th>Title</th><th>Type</th><th>Mode</th><th>Start</th><th></th></tr>
                 </thead>
                 <tbody>
                   {archived.map((t) => (
                     <tr key={t.id}>
                       <td>{t.title}</td>
                       <td>
-                        <span
-                          className={
-                            'rounded-full px-2 py-0.5 text-[10px] font-medium ' +
-                            (t.type === 'long'
-                              ? 'bg-violet-900/40 text-violet-400'
-                              : 'bg-sky-900/40 text-sky-400')
-                          }
-                        >
+                        <span className={'rounded-full px-2 py-0.5 text-[10px] font-medium ' + (t.type === 'long' ? 'bg-violet-900/40 text-violet-400' : 'bg-sky-900/40 text-sky-400')}>
                           {t.type === 'long' ? 'Long' : 'Single'}
                         </span>
                       </td>
                       <td>{t.mode?.toUpperCase()}</td>
                       <td>{t.start_time ? new Date(t.start_time).toLocaleString('en-IN') : '—'}</td>
                       <td className="text-right">
-                        <button
-                          type="button"
-                          className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors"
-                          onClick={() => openDelete(t)}
-                        >
-                          Delete
-                        </button>
+                        <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => openDelete(t)}>Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -1032,33 +743,10 @@ export function TournamentsPage() {
         </section>
       )}
 
-      {/* Form modal */}
-      <TournamentForm
-        open={formOpen}
-        initial={editing}
-        onClose={() => setFormOpen(false)}
-        onSaved={load}
-        gameId={gameId}
-      />
-
+      <TournamentForm open={formOpen} initial={editing} onClose={() => setFormOpen(false)} onSaved={load} gameId={gameId} />
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
-
-      <ConfirmDialog
-        open={confirmArchive.open}
-        title="Archive tournament?"
-        description="Archived tournaments are hidden from lists but kept in the database."
-        confirmLabel="Archive"
-        onCancel={() => setConfirmArchive({ open: false })}
-        onConfirm={handleArchiveConfirmed}
-      />
-      <ConfirmDialog
-        open={confirmDelete.open}
-        title={`Delete "${confirmDelete.title}"?`}
-        description="This will permanently delete the tournament and all its registrations. This action cannot be undone."
-        confirmLabel="Delete permanently"
-        onCancel={() => setConfirmDelete({ open: false })}
-        onConfirm={handleDeleteConfirmed}
-      />
+      <ConfirmDialog open={confirmArchive.open} title="Archive tournament?" description="Archived tournaments are hidden from lists but kept in the database." confirmLabel="Archive" onCancel={() => setConfirmArchive({ open: false })} onConfirm={handleArchiveConfirmed} />
+      <ConfirmDialog open={confirmDelete.open} title={`Delete "${confirmDelete.title}"?`} description="This will permanently delete the tournament and all its registrations. This action cannot be undone." confirmLabel="Delete permanently" onCancel={() => setConfirmDelete({ open: false })} onConfirm={handleDeleteConfirmed} />
     </div>
   );
 }
