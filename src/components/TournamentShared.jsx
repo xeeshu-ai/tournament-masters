@@ -464,6 +464,3 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
     </div>
   );
 }
-
-// Re-export these so pages that import from here still work
-export { SingleTournamentRow, ArchivedSection } from './TournamentShared.parts';
