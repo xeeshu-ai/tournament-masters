@@ -608,8 +608,7 @@ export function ResultsPage() {
   }, [gameId]);
 
   const loadTeams = async (tid) => {
-    // FIX: load all non-rejected registrations, not just 'confirmed'
-    // Many tournaments use null/pending status for registered teams
+    // load all non-rejected registrations
     const { data: regsData } = await supabaseAdmin
       .from('tournament_registrations')
       .select('*')
@@ -657,9 +656,15 @@ export function ResultsPage() {
   const handleChangeBrRow = (index, field, value) => {
     setBrRows((rows) => {
       const next = [...rows];
-      const row = { ...next[index], [field]: value };
-      row.points = calculateBrPoints(Number(row.position || 0), Number(row.kills || 0));
-      next[index] = row;
+      // Build updated row with new field value
+      const updatedRow = { ...next[index], [field]: value };
+      // FIX: correct arg order — kills first, position second
+      updatedRow.points = calculateBrPoints(
+        Number(updatedRow.kills    || 0),
+        Number(updatedRow.position || 1),
+        selected?.game_id
+      );
+      next[index] = updatedRow;
       return next;
     });
   };
@@ -716,9 +721,7 @@ export function ResultsPage() {
     setStatus('idle');
   };
 
-  // ── Mode flags ───────────────────────────────────────────────────
-  // FIX: isSingleBR now matches ALL BR tournaments regardless of type (single/long)
-  // BGMI BR tournaments use type='long' but still use single_br_results column
+  // isSingleBR matches ALL BR tournaments regardless of type (single/long)
   const isSingleBR = selected && selected.mode === 'br';
   const isBgmiTDM  = selected && selected.mode === 'tdm' && selected.game_id === 'bgmi';
   const isCSorLW   = selected && (selected.mode === 'cs' || selected.mode === 'lw');

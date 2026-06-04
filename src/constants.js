@@ -112,13 +112,17 @@ export function getGame(gameId) {
 }
 
 /**
- * BGMI BR scoring (standard tournament formula):
- *   Position points:  #1=15, #2=12, #3=10, #4=8, #5=6, #6-#10=4, #11-#15=2, else 0
+ * BR scoring — signature: calculateBrPoints(kills, position, gameId)
+ *
+ * BGMI BR:
+ *   Position points: #1=15, #2=12, #3=10, #4=8, #5=6, #6-#10=4, #11-#15=2, else 0
  *   Kill points: 1 per kill
  *   Total = position_pts + kills
  *
- * Free Fire formula (legacy):
- *   Points = ((kills + 1) / position) * 100
+ * Free Fire BR (flat bonus system):
+ *   Position bonus: #1=+10, #2=+6, #3=+4, else 0
+ *   Kill points: 1 per kill
+ *   Total = position_bonus + kills
  */
 export function calculateBrPoints(kills, position, gameId) {
   const k = Math.max(Number(kills || 0), 0);
@@ -129,8 +133,11 @@ export function calculateBrPoints(kills, position, gameId) {
     const posPts = posTable[p - 1] ?? 0;
     return posPts + k;
   }
-  // Free Fire legacy formula
-  return Math.round(((k + 1) / p) * 100);
+
+  // Free Fire — position bonus: 1st=+10, 2nd=+6, 3rd=+4, rest=0
+  const ffPosTable = [10, 6, 4];
+  const ffPosPts = ffPosTable[p - 1] ?? 0;
+  return ffPosPts + k;
 }
 
 export function isPowerOfTwo(n) {
