@@ -32,6 +32,148 @@ function useResultsDraft(initialRows) {
   return { rows, setRows, updateRow, lastSavedAt };
 }
 
+// ── Inline Room Code Form ─────────────────────────────────────────────────
+function RoomTab({ tournamentId }) {
+  const [form, setForm] = React.useState({ room_id: '', room_password: '' });
+  const [existing, setExisting] = React.useState(null);
+  const [status, setStatus] = React.useState('idle');
+  const [toggling, setToggling] = React.useState(false);
+  const [toast, setToast] = React.useState(null);
+
+  const notify = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  React.useEffect(() => {
+    async function load() {
+      const { data } = await supabaseAdmin
+        .from('room_codes')
+        .select('*')
+        .eq('tournament_id', tournamentId)
+        .maybeSingle();
+      setExisting(data || null);
+      setForm({ room_id: data?.room_id || '', room_password: data?.room_password || '' });
+    }
+    if (tournamentId) load();
+  }, [tournamentId]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!form.room_id.trim() || !form.room_password.trim()) {
+      notify('Room ID and password are required.', 'error');
+      return;
+    }
+    setStatus('saving');
+    const payload = {
+      tournament_id: tournamentId,
+      room_id: form.room_id.trim(),
+      room_password: form.room_password.trim(),
+    };
+    let error;
+    if (existing?.id) {
+      ({ error } = await supabaseAdmin.from('room_codes').update(payload).eq('id', existing.id));
+    } else {
+      ({ error } = await supabaseAdmin.from('room_codes').insert({ ...payload, is_revealed: false }));
+    }
+    setStatus('idle');
+    if (error) { notify('Failed to save room code.', 'error'); return; }
+    notify('Room code saved!');
+    // Reload
+    const { data } = await supabaseAdmin.from('room_codes').select('*').eq('tournament_id', tournamentId).maybeSingle();
+    setExisting(data || null);
+  };
+
+  const handleToggleReveal = async () => {
+    if (!existing?.id) return;
+    setToggling(true);
+    const newVal = !existing.is_revealed;
+    const { error } = await supabaseAdmin.from('room_codes').update({ is_revealed: newVal }).eq('id', existing.id);
+    setToggling(false);
+    if (error) { notify('Failed to update reveal status.', 'error'); return; }
+    setExisting((prev) => ({ ...prev, is_revealed: newVal }));
+    notify(newVal ? 'Room code is now visible to hosts.' : 'Room code is now hidden.');
+  };
+
+  return (
+    <div className="space-y-4">
+      {toast && (
+        <div className={`rounded-lg px-3 py-2 text-xs ${
+          toast.type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
+        }`}>{toast.msg}</div>
+      )}
+
+      <div className="card space-y-3 text-xs">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-100">Room details</h2>
+          <p className="text-[11px] text-slate-400 mt-0.5">Room ID and password are visible only to confirmed teams in the public app.</p>
+        </div>
+
+        <form onSubmit={handleSave} className="grid gap-3 md:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="room_id">Room ID</label>
+            <input
+              id="room_id"
+              name="room_id"
+              className="input"
+              value={form.room_id}
+              onChange={handleChange}
+              placeholder="Enter room ID"
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="room_password">Room Password</label>
+            <input
+              id="room_password"
+              name="room_password"
+              className="input"
+              value={form.room_password}
+              onChange={handleChange}
+              placeholder="Enter room password"
+            />
+          </div>
+          <div className="md:col-span-2 flex justify-end pt-1">
+            <button type="submit" className="btn-primary text-xs" disabled={status === 'saving'}>
+              {status === 'saving' ? 'Saving…' : existing?.id ? 'Update room code' : 'Save room code'}
+            </button>
+          </div>
+        </form>
+
+        {existing?.id && (
+          <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-3">
+            <div className="space-y-0.5">
+              <p className="text-xs font-semibold text-slate-200">
+                {existing.is_revealed ? '👁 Room code is visible to hosts' : '🙈 Room code is hidden from hosts'}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {existing.is_revealed
+                  ? 'Hosts can currently see the room ID and password.'
+                  : 'Hosts cannot see the room details yet. Reveal when ready.'}
+              </p>
+            </div>
+            <button
+              onClick={handleToggleReveal}
+              disabled={toggling}
+              className={`ml-4 shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-colors ${
+                existing.is_revealed
+                  ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-700/40'
+                  : 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-700/40'
+              }`}
+            >
+              {toggling ? '…' : existing.is_revealed ? 'Hide' : 'Reveal'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SingleTournamentDetailPage() {
   const { gameId, tournamentId } = useParams();
   const navigate = useNavigate();
@@ -48,7 +190,6 @@ export function SingleTournamentDetailPage() {
   const [hasUnsavedResults, setHasUnsavedResults] = React.useState(false);
 
   const [brDraft, setBrDraft] = React.useState({ rows: [], lastSavedAt: null });
-  // TDM draft: per-team kills only
   const [tdmDraft, setTdmDraft] = React.useState({ rows: [] });
 
   const notify = (message, type = 'success') => {
@@ -89,19 +230,19 @@ export function SingleTournamentDetailPage() {
     const regs = rData || [];
     setRegistrations(regs);
 
-    if (tData?.mode === 'br') {
-      setBrDraft({
-        rows: regs.map((r) => ({
-          registration_id: r.id,
-          team_name: r.team_name,
-          kills: '',
-          position: '',
-          points: 0,
-        })),
-        lastSavedAt: null,
-      });
-    } else if (tData?.mode === 'tdm') {
-      // TDM draft — kills only, no position/points calc
+    // Always init BR draft — works for br, squad, solo, duo, and any other mode
+    setBrDraft({
+      rows: regs.map((r) => ({
+        registration_id: r.id,
+        team_name: r.team_name,
+        kills: '',
+        position: '',
+        points: 0,
+      })),
+      lastSavedAt: null,
+    });
+
+    if (tData?.mode === 'tdm') {
       setTdmDraft({
         rows: regs.map((r) => ({
           registration_id: r.id,
@@ -110,7 +251,6 @@ export function SingleTournamentDetailPage() {
         })),
       });
     } else {
-      setBrDraft({ rows: [], lastSavedAt: null });
       setTdmDraft({ rows: [] });
     }
 
@@ -174,17 +314,12 @@ export function SingleTournamentDetailPage() {
     navigate(`/${gameId}/single-tournaments`);
   };
 
-  const confirmed = registrations.filter((r) => r.status === 'confirmed');
-  const pending   = registrations.filter((r) => r.status === 'pending');
-
   const typeLabel = tournament
     ? TOURNAMENT_TYPES.find((t) => t.id === tournament.type)?.label || tournament.type
     : '';
 
   const isTDM = tournament?.mode === 'tdm';
-  const isBR  = tournament?.mode === 'br';
 
-  // BR result handlers
   const handleChangeBrRow = (index, field, value) => {
     setBrDraft((prev) => {
       const nextRows = [...prev.rows];
@@ -197,7 +332,7 @@ export function SingleTournamentDetailPage() {
   };
 
   const handlePublishBrResults = async () => {
-    if (!tournament || !isBR) return;
+    if (!tournament) return;
     const sorted = [...brDraft.rows].map((r) => ({
       team_name: r.team_name,
       kills: Number(r.kills || 0),
@@ -211,7 +346,6 @@ export function SingleTournamentDetailPage() {
     setHasUnsavedResults(false);
   };
 
-  // TDM result handlers (kills only)
   const handleChangeTdmRow = (index, value) => {
     setTdmDraft((prev) => {
       const nextRows = [...prev.rows];
@@ -223,8 +357,6 @@ export function SingleTournamentDetailPage() {
 
   const handlePublishTdmResults = async () => {
     if (!tournament || !isTDM) return;
-    const killTarget = tournament.kill_target || BGMI_TDM_KILL_TARGET;
-    // Sort by kills descending to determine winner
     const sorted = [...tdmDraft.rows].map((r) => ({
       team_name: r.team_name,
       kills: Number(r.kills || 0),
@@ -373,47 +505,14 @@ export function SingleTournamentDetailPage() {
       {/* Room tab */}
       {activeTab === 'room' && (
         <section className="space-y-3">
-          <div className="card space-y-2 text-xs">
-            <h2 className="text-sm font-semibold text-slate-100">Room details</h2>
-            <p className="text-[11px] text-slate-400">Room ID and password are visible only to confirmed teams in the public app.</p>
-            <p className="text-[11px] text-slate-500">Room configuration is handled by the legacy view. This tab is reserved for the new flow.</p>
-          </div>
+          <RoomTab tournamentId={tournamentId} />
         </section>
       )}
 
       {/* Results tab */}
       {activeTab === 'results' && (
         <section className="space-y-3">
-          {isBR ? (
-            <>
-              <h2 className="text-sm font-semibold text-slate-100">Battle Royale · Result Draft</h2>
-              <div className="card overflow-x-auto text-xs">
-                {brDraft.rows.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">No teams to score yet. Confirm registrations first.</p>
-                ) : (
-                  <table className="table">
-                    <thead>
-                      <tr><th>Team</th><th>Kills</th><th>Position</th><th>Points (auto)</th></tr>
-                    </thead>
-                    <tbody>
-                      {brDraft.rows.map((row, idx) => (
-                        <tr key={row.registration_id}>
-                          <td className="font-semibold">{row.team_name}</td>
-                          <td><input type="number" className="input w-20 text-xs" value={row.kills} onChange={(e) => handleChangeBrRow(idx, 'kills', e.target.value)} /></td>
-                          <td><input type="number" className="input w-20 text-xs" value={row.position} onChange={(e) => handleChangeBrRow(idx, 'position', e.target.value)} /></td>
-                          <td className="font-semibold text-sky-300">{row.points}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>{hasUnsavedResults ? 'Draft has unsaved changes.' : 'Draft is in sync.'}</span>
-                <button type="button" className="btn-primary text-xs" onClick={handlePublishBrResults} disabled={!brDraft.rows.length}>Post Results</button>
-              </div>
-            </>
-          ) : isTDM ? (
+          {isTDM ? (
             <>
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-100">TDM · Result Draft</h2>
@@ -456,9 +555,35 @@ export function SingleTournamentDetailPage() {
               </div>
             </>
           ) : (
-            <div className="card text-xs text-slate-400">
-              Results entry for this mode is handled via the long tournaments/results flow.
-            </div>
+            // BR / Squad / Solo / Duo — all handled with kills + position table
+            <>
+              <h2 className="text-sm font-semibold text-slate-100">Battle Royale · Result Draft</h2>
+              <div className="card overflow-x-auto text-xs">
+                {brDraft.rows.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No teams to score yet. Confirm registrations first.</p>
+                ) : (
+                  <table className="table">
+                    <thead>
+                      <tr><th>Team</th><th>Kills</th><th>Position</th><th>Points (auto)</th></tr>
+                    </thead>
+                    <tbody>
+                      {brDraft.rows.map((row, idx) => (
+                        <tr key={row.registration_id}>
+                          <td className="font-semibold">{row.team_name}</td>
+                          <td><input type="number" className="input w-20 text-xs" value={row.kills} onChange={(e) => handleChangeBrRow(idx, 'kills', e.target.value)} /></td>
+                          <td><input type="number" className="input w-20 text-xs" value={row.position} onChange={(e) => handleChangeBrRow(idx, 'position', e.target.value)} /></td>
+                          <td className="font-semibold text-sky-300">{row.points}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span>{hasUnsavedResults ? 'Draft has unsaved changes.' : 'Draft is in sync.'}</span>
+                <button type="button" className="btn-primary text-xs" onClick={handlePublishBrResults} disabled={!brDraft.rows.length}>Post Results</button>
+              </div>
+            </>
           )}
         </section>
       )}
