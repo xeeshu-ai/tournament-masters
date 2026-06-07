@@ -84,7 +84,6 @@ function RoomTab({ tournamentId }) {
     setStatus('idle');
     if (error) { notify('Failed to save room code.', 'error'); return; }
     notify('Room code saved!');
-    // Reload
     const { data } = await supabaseAdmin.from('room_codes').select('*').eq('tournament_id', tournamentId).maybeSingle();
     setExisting(data || null);
   };
@@ -174,6 +173,113 @@ function RoomTab({ tournamentId }) {
   );
 }
 
+// ── CS / Lone Wolf Head-to-Head Match Card ────────────────────────────────
+function CsMatchCard({ match, matchIndex, onChange, modeLabel }) {
+  const { team_a, rounds_a, team_b, rounds_b, winner } = match;
+
+  const setRounds = (side, val) => {
+    const num = Math.max(0, Number(val) || 0);
+    onChange(matchIndex, side === 'a' ? 'rounds_a' : 'rounds_b', num);
+  };
+
+  const setWinner = (side) => {
+    onChange(matchIndex, 'winner', side === winner ? null : side);
+  };
+
+  return (
+    <div className="card space-y-3 text-xs border border-slate-700/60">
+      {/* Match header */}
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+          {modeLabel} Match {matchIndex + 1}
+        </span>
+        {winner && (
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-600/30 font-semibold">
+            Winner set ✓
+          </span>
+        )}
+      </div>
+
+      {/* Two-column head-to-head */}
+      <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-stretch">
+        {/* Team A */}
+        <div className={`rounded-lg border p-3 space-y-2 transition-colors ${
+          winner === 'a'
+            ? 'border-sky-500/60 bg-sky-500/10'
+            : 'border-slate-700/50 bg-slate-800/40'
+        }`}>
+          <p className="font-semibold text-slate-100 truncate" title={team_a}>{team_a}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-[11px] shrink-0">Rounds Won</span>
+            <input
+              type="number"
+              min="0"
+              className="input w-16 text-center text-sm font-bold"
+              value={rounds_a === '' ? '' : rounds_a}
+              placeholder="0"
+              onChange={(e) => setRounds('a', e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* VS divider */}
+        <div className="flex flex-col items-center justify-center px-1 gap-1">
+          <span className="text-[11px] font-bold text-slate-500">VS</span>
+        </div>
+
+        {/* Team B */}
+        <div className={`rounded-lg border p-3 space-y-2 transition-colors ${
+          winner === 'b'
+            ? 'border-sky-500/60 bg-sky-500/10'
+            : 'border-slate-700/50 bg-slate-800/40'
+        }`}>
+          <p className="font-semibold text-slate-100 truncate" title={team_b}>{team_b}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-[11px] shrink-0">Rounds Won</span>
+            <input
+              type="number"
+              min="0"
+              className="input w-16 text-center text-sm font-bold"
+              value={rounds_b === '' ? '' : rounds_b}
+              placeholder="0"
+              onChange={(e) => setRounds('b', e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Winner toggle */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-slate-400 shrink-0">Winner →</span>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => setWinner('a')}
+            className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors border ${
+              winner === 'a'
+                ? 'bg-sky-600/30 text-sky-300 border-sky-500/60'
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+            }`}
+          >
+            {team_a}
+          </button>
+          <button
+            type="button"
+            onClick={() => setWinner('b')}
+            className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors border ${
+              winner === 'b'
+                ? 'bg-sky-600/30 text-sky-300 border-sky-500/60'
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+            }`}
+          >
+            {team_b}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SingleTournamentDetailPage() {
   const { gameId, tournamentId } = useParams();
   const navigate = useNavigate();
@@ -191,7 +297,9 @@ export function SingleTournamentDetailPage() {
 
   const [brDraft, setBrDraft] = React.useState({ rows: [], lastSavedAt: null });
   const [tdmDraft, setTdmDraft] = React.useState({ rows: [] });
-  const [csDraft, setCsDraft] = React.useState({ rows: [] });
+  // csDraft for CS/LW: array of head-to-head match objects
+  // { team_a, rounds_a, team_b, rounds_b, winner: 'a'|'b'|null }
+  const [csDraft, setCsDraft] = React.useState({ matches: [] });
 
   const notify = (message, type = 'success') => {
     setToast({ message, type });
@@ -233,15 +341,35 @@ export function SingleTournamentDetailPage() {
 
     const mode = tData?.mode || '';
 
-    // CS / Lone Wolf draft — kills only, winner determined by most kills
     if (mode === 'cs' || mode === 'lone_wolf') {
-      setCsDraft({
-        rows: regs.map((r) => ({
-          registration_id: r.id,
-          team_name: r.team_name,
-          kills: '',
-        })),
-      });
+      // Build head-to-head pairs from confirmed registrations
+      const confirmed = regs.filter((r) => r.status === 'confirmed');
+      const matches = [];
+      for (let i = 0; i + 1 < confirmed.length; i += 2) {
+        matches.push({
+          team_a: confirmed[i].team_name,
+          team_a_id: confirmed[i].id,
+          rounds_a: '',
+          team_b: confirmed[i + 1].team_name,
+          team_b_id: confirmed[i + 1].id,
+          rounds_b: '',
+          winner: null,
+        });
+      }
+      // If odd team out, add solo entry
+      if (confirmed.length % 2 !== 0 && confirmed.length > 0) {
+        const solo = confirmed[confirmed.length - 1];
+        matches.push({
+          team_a: solo.team_name,
+          team_a_id: solo.id,
+          rounds_a: '',
+          team_b: 'BYE',
+          team_b_id: null,
+          rounds_b: 0,
+          winner: 'a',
+        });
+      }
+      setCsDraft({ matches });
       setBrDraft({ rows: [], lastSavedAt: null });
       setTdmDraft({ rows: [] });
     } else if (mode === 'tdm') {
@@ -253,9 +381,8 @@ export function SingleTournamentDetailPage() {
         })),
       });
       setBrDraft({ rows: [], lastSavedAt: null });
-      setCsDraft({ rows: [] });
+      setCsDraft({ matches: [] });
     } else {
-      // BR / Squad / Solo / Duo — kills + position + auto points
       setBrDraft({
         rows: regs.map((r) => ({
           registration_id: r.id,
@@ -267,7 +394,7 @@ export function SingleTournamentDetailPage() {
         lastSavedAt: null,
       });
       setTdmDraft({ rows: [] });
-      setCsDraft({ rows: [] });
+      setCsDraft({ matches: [] });
     }
 
     setLoading(false);
@@ -339,6 +466,7 @@ export function SingleTournamentDetailPage() {
   const isCS = mode === 'cs';
   const isLW = mode === 'lone_wolf';
   const isCSorLW = isCS || isLW;
+  const modeLabel = isLW ? 'Lone Wolf' : 'Clash Squad';
 
   const handleChangeBrRow = (index, field, value) => {
     setBrDraft((prev) => {
@@ -388,25 +516,49 @@ export function SingleTournamentDetailPage() {
     setHasUnsavedResults(false);
   };
 
-  const handleChangeCsRow = (index, value) => {
+  // CS/LW match field change handler
+  const handleChangeCsMatch = (matchIndex, field, value) => {
     setCsDraft((prev) => {
-      const nextRows = [...prev.rows];
-      nextRows[index] = { ...nextRows[index], kills: value };
-      return { rows: nextRows };
+      const nextMatches = [...prev.matches];
+      nextMatches[matchIndex] = { ...nextMatches[matchIndex], [field]: value };
+      return { matches: nextMatches };
     });
     setHasUnsavedResults(true);
   };
 
   const handlePublishCsResults = async () => {
     if (!tournament || !isCSorLW) return;
-    const sorted = [...csDraft.rows].map((r) => ({
-      team_name: r.team_name,
-      kills: Number(r.kills || 0),
-    })).sort((a, b) => b.kills - a.kills);
+    // Build a flat result array — one entry per team with their rounds and whether they won
+    const results = [];
+    for (const m of csDraft.matches) {
+      if (m.team_b === 'BYE') {
+        results.push({ team_name: m.team_a, rounds_won: Number(m.rounds_a || 0), won: true });
+        continue;
+      }
+      results.push({
+        team_name: m.team_a,
+        rounds_won: Number(m.rounds_a || 0),
+        won: m.winner === 'a',
+        vs: m.team_b,
+        rounds_lost: Number(m.rounds_b || 0),
+      });
+      results.push({
+        team_name: m.team_b,
+        rounds_won: Number(m.rounds_b || 0),
+        won: m.winner === 'b',
+        vs: m.team_a,
+        rounds_lost: Number(m.rounds_a || 0),
+      });
+    }
+    // Sort: winners first, then by rounds won
+    results.sort((a, b) => {
+      if (a.won !== b.won) return a.won ? -1 : 1;
+      return b.rounds_won - a.rounds_won;
+    });
 
-    const { error } = await supabaseAdmin.from('tournaments').update({ single_br_results: sorted }).eq('id', tournament.id);
+    const { error } = await supabaseAdmin.from('tournaments').update({ single_br_results: results }).eq('id', tournament.id);
     if (error) { notify(`Failed to save results: ${error.message}`, 'error'); return; }
-    notify(`${isLW ? 'Lone Wolf' : 'Clash Squad'} results posted to players.`);
+    notify(`${modeLabel} results posted to players.`);
     setHasUnsavedResults(false);
   };
 
@@ -553,47 +705,44 @@ export function SingleTournamentDetailPage() {
 
       {/* Results tab */}
       {activeTab === 'results' && (
-        <section className="space-y-3">
-          {/* ── CS / Lone Wolf ── */}
+        <section className="space-y-4">
+          {/* ── CS / Lone Wolf — Round-based head-to-head ── */}
           {isCSorLW ? (
             <>
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-100">
-                  {isLW ? 'Lone Wolf' : 'Clash Squad'} · Result Draft
+                  {modeLabel} · Match Results
                 </h2>
-                <span className="text-[11px] text-slate-400">Kills only — highest kills wins</span>
+                <span className="text-[11px] text-slate-400">Rounds won per match — select a winner</span>
               </div>
-              <div className="card overflow-x-auto text-xs">
-                {csDraft.rows.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">No teams to score yet. Confirm registrations first.</p>
-                ) : (
-                  <table className="table">
-                    <thead>
-                      <tr><th>Team</th><th>Kills</th></tr>
-                    </thead>
-                    <tbody>
-                      {csDraft.rows.map((row, idx) => (
-                        <tr key={row.registration_id}>
-                          <td className="font-semibold">{row.team_name}</td>
-                          <td>
-                            <input
-                              type="number"
-                              className="input w-24 text-xs"
-                              value={row.kills}
-                              placeholder="0"
-                              onChange={(e) => handleChangeCsRow(idx, e.target.value)}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>{hasUnsavedResults ? 'Draft has unsaved changes.' : 'Draft is in sync.'}</span>
-                <button type="button" className="btn-primary text-xs" onClick={handlePublishCsResults} disabled={!csDraft.rows.length}>
-                  Post {isLW ? 'Lone Wolf' : 'CS'} Results
+
+              {csDraft.matches.length === 0 ? (
+                <div className="card text-xs text-slate-400 py-6 text-center">
+                  No confirmed teams to pair yet. Confirm at least 2 registrations first.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {csDraft.matches.map((match, idx) => (
+                    <CsMatchCard
+                      key={idx}
+                      match={match}
+                      matchIndex={idx}
+                      onChange={handleChangeCsMatch}
+                      modeLabel={modeLabel}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                <span>{hasUnsavedResults ? '● Draft has unsaved changes.' : '✓ Draft is in sync.'}</span>
+                <button
+                  type="button"
+                  className="btn-primary text-xs"
+                  onClick={handlePublishCsResults}
+                  disabled={!csDraft.matches.length}
+                >
+                  Post {modeLabel} Results
                 </button>
               </div>
             </>
