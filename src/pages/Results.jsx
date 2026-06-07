@@ -217,7 +217,7 @@ function TdmResultEntry({ tournament, teams, onSaved }) {
 }
 
 // ── FF CS / LW Result Entry ───────────────────────────────────────────────
-function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
+function CsLwResultEntry({ tournament, teams, onSaved }) {
   const totalRounds = Number(tournament.total_rounds) || 13;
   const objectiveRounds = Math.ceil(totalRounds / 2) + 1;
 
@@ -232,7 +232,7 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   const [matchData, setMatchData] = React.useState([]);
 
   React.useEffect(() => {
-    setMatchData(pairs.map(() => ({ roundsA: '', roundsB: '', winner: '', players: {} })));
+    setMatchData(pairs.map(() => ({ roundsA: '', roundsB: '', winner: '' })));
   }, [pairs]);
 
   const [saving, setSaving] = React.useState(false);
@@ -258,37 +258,13 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
     });
   }
 
-  function setPlayerStat(pairIdx, uid, field, val) {
-    setMatchData((prev) => {
-      const next = [...prev];
-      const players = {
-        ...next[pairIdx].players,
-        [uid]: { ...(next[pairIdx].players[uid] || {}), [field]: val },
-      };
-      next[pairIdx] = { ...next[pairIdx], players };
-      return next;
-    });
-  }
-
   async function handleSave() {
     setSaving(true);
     const matches = pairs.map((pair, i) => {
       const md = matchData[i];
-      const entriesA = buildPlayerEntries(pair.a, uidToName);
-      const entriesB = buildPlayerEntries(pair.b, uidToName);
-      const playersA = entriesA.map(({ uid, name }) => ({
-        name, uid,
-        kills: Number(md.players[uid]?.kills || 0),
-        deaths: Number(md.players[uid]?.deaths || 0),
-      }));
-      const playersB = entriesB.map(({ uid, name }) => ({
-        name, uid,
-        kills: Number(md.players[uid]?.kills || 0),
-        deaths: Number(md.players[uid]?.deaths || 0),
-      }));
       return {
-        teamA: { name: pair.a.team_name, rounds_won: Number(md.roundsA || 0), players: playersA },
-        teamB: { name: pair.b.team_name, rounds_won: Number(md.roundsB || 0), players: playersB },
+        teamA: { name: pair.a.team_name, rounds_won: Number(md.roundsA || 0) },
+        teamB: { name: pair.b.team_name, rounds_won: Number(md.roundsB || 0) },
         winner_team: md.winner === 'a' ? pair.a.team_name : md.winner === 'b' ? pair.b.team_name : null,
       };
     });
@@ -350,23 +326,21 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
       {pairs.map((pair, pairIdx) => {
         const md = matchData[pairIdx];
         if (!md) return null;
-        const entriesA = buildPlayerEntries(pair.a, uidToName);
-        const entriesB = buildPlayerEntries(pair.b, uidToName);
 
         return (
           <div key={pairIdx} className="card space-y-4">
             <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Match {pairIdx + 1}</div>
-            <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
+              {/* Team A */}
               <TeamPanel
                 team={pair.a}
-                playerEntries={entriesA}
                 rounds={md.roundsA}
                 onRoundsChange={(v) => setRounds(pairIdx, 'a', v)}
-                playerStats={md.players}
-                onStatChange={(uid, field, val) => setPlayerStat(pairIdx, uid, field, val)}
                 isWinner={md.winner === 'a'}
               />
-              <div className="flex flex-col items-center gap-3 pt-8">
+
+              {/* VS + Winner */}
+              <div className="flex flex-col items-center gap-3">
                 <span className="text-slate-500 font-bold text-sm">VS</span>
                 <div className="space-y-1 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wider">Winner</p>
@@ -384,13 +358,12 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
                   </button>
                 </div>
               </div>
+
+              {/* Team B */}
               <TeamPanel
                 team={pair.b}
-                playerEntries={entriesB}
                 rounds={md.roundsB}
                 onRoundsChange={(v) => setRounds(pairIdx, 'b', v)}
-                playerStats={md.players}
-                onStatChange={(uid, field, val) => setPlayerStat(pairIdx, uid, field, val)}
                 isWinner={md.winner === 'b'}
               />
             </div>
@@ -405,31 +378,25 @@ function CsLwResultEntry({ tournament, teams, uidToName, onSaved }) {
   );
 }
 
-function TeamPanel({ team, playerEntries, rounds, onRoundsChange, playerStats, onStatChange, isWinner }) {
+// ── TeamPanel — rounds won only (no per-player kills/deaths) ──────────────
+function TeamPanel({ team, rounds, onRoundsChange, isWinner }) {
   return (
-    <div className={`rounded-xl border p-3 space-y-3 transition-colors ${isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'}`}>
+    <div className={`rounded-xl border p-4 space-y-3 transition-colors ${isWinner ? 'border-emerald-600 bg-emerald-500/5' : 'border-slate-700 bg-slate-900/60'}`}>
       <div className="flex items-center gap-2">
         <div className="w-5 h-5 rounded bg-slate-700 border border-slate-600 flex-shrink-0" />
         <span className="font-bold text-sm text-slate-100 truncate">{team.team_name.toUpperCase()}</span>
         {isWinner && <span className="ml-auto text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">Winner</span>}
       </div>
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-slate-400 whitespace-nowrap">Rounds:</span>
-        <input type="number" min="0" value={rounds} onChange={(e) => onRoundsChange(e.target.value)} className="input w-16 text-xs text-center" placeholder="0" />
-      </div>
-      <div>
-        <div className="grid grid-cols-3 gap-1 text-[10px] text-slate-500 uppercase tracking-wider mb-1 px-1">
-          <span>Player</span><span className="text-center">Kills</span><span className="text-center">Deaths</span>
-        </div>
-        <div className="space-y-1">
-          {playerEntries.map(({ uid, name }) => (
-            <div key={uid} className="grid grid-cols-3 gap-1 items-center">
-              <span className="text-[11px] text-slate-200 truncate" title={uid}>{name}</span>
-              <input type="number" min="0" value={playerStats[uid]?.kills ?? ''} onChange={(e) => onStatChange(uid, 'kills', e.target.value)} placeholder="K" className="input w-full text-xs text-center py-1" />
-              <input type="number" min="0" value={playerStats[uid]?.deaths ?? ''} onChange={(e) => onStatChange(uid, 'deaths', e.target.value)} placeholder="D" className="input w-full text-xs text-center py-1" />
-            </div>
-          ))}
-        </div>
+      <div className="flex items-center gap-3">
+        <span className="text-[11px] text-slate-400 whitespace-nowrap">Rounds Won:</span>
+        <input
+          type="number"
+          min="0"
+          value={rounds}
+          onChange={(e) => onRoundsChange(e.target.value)}
+          className="input w-20 text-xs text-center"
+          placeholder="0"
+        />
       </div>
     </div>
   );
@@ -608,7 +575,6 @@ export function ResultsPage() {
   }, [gameId]);
 
   const loadTeams = async (tid) => {
-    // load all non-rejected registrations
     const { data: regsData } = await supabaseAdmin
       .from('tournament_registrations')
       .select('*')
@@ -656,9 +622,7 @@ export function ResultsPage() {
   const handleChangeBrRow = (index, field, value) => {
     setBrRows((rows) => {
       const next = [...rows];
-      // Build updated row with new field value
       const updatedRow = { ...next[index], [field]: value };
-      // FIX: correct arg order — kills first, position second
       updatedRow.points = calculateBrPoints(
         Number(updatedRow.kills    || 0),
         Number(updatedRow.position || 1),
@@ -721,7 +685,6 @@ export function ResultsPage() {
     setStatus('idle');
   };
 
-  // isSingleBR matches ALL BR tournaments regardless of type (single/long)
   const isSingleBR = selected && selected.mode === 'br';
   const isBgmiTDM  = selected && selected.mode === 'tdm' && selected.game_id === 'bgmi';
   const isCSorLW   = selected && (selected.mode === 'cs' || selected.mode === 'lw');
@@ -758,79 +721,60 @@ export function ResultsPage() {
       </header>
 
       {!fromTournament && (
-        <div className="card space-y-3 text-xs">
-          <label className="label">Tournament</label>
+        <div className="card space-y-2">
+          <label className="label">Select Tournament</label>
           <select
-            className="input"
+            className="input text-xs"
             value={selected?.id || ''}
             onChange={(e) => handleSelectTournament(e.target.value)}
           >
-            <option value="">Select tournament…</option>
+            <option value="">— choose a tournament —</option>
             {tournaments.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.title} · {t.type} · {t.mode?.toUpperCase()}{t.status === 'ended' ? ' [ENDED]' : ''}
+                {t.title} [{t.mode?.toUpperCase()}] — {t.status}
               </option>
             ))}
           </select>
         </div>
       )}
 
-      {fromTournament && selected && (
-        <div className="rounded-lg bg-slate-900 border border-slate-800 px-3 py-2 text-xs text-slate-300">
-          Tournament: <span className="font-semibold text-slate-100">{selected.title}</span>
-          <span className="ml-2 text-slate-500">· {selected.mode?.toUpperCase()} · {selected.type}</span>
-        </div>
-      )}
-
-      {/* BGMI TDM: kill-based result entry */}
-      {selected && isBgmiTDM && (
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-slate-100">🎯 BGMI TDM · Result Entry</h2>
-          <TdmResultEntry
-            tournament={selected}
-            teams={teams}
-            onSaved={() => { notify('TDM results saved!'); loadTeams(selected.id); }}
-          />
-        </section>
-      )}
-
-      {/* FF CS / LW: rounds + per-player K/D */}
-      {selected && isCSorLW && (
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-slate-100">
-            {selected.mode === 'cs' ? '⚔️ Clash Squad' : '🐺 Lone Wolf'} · Result Entry
-          </h2>
-          <CsLwResultEntry
-            tournament={selected}
-            teams={teams}
-            uidToName={uidToName}
-            onSaved={() => { notify('CS/LW results saved!'); loadTeams(selected.id); }}
-          />
-        </section>
-      )}
-
-      {/* BR (FF + BGMI, any type): kills + position → points */}
-      {selected && isSingleBR && (
-        <section>
-          <BrResultEntry
-            tournament={selected}
-            teams={teams}
-            uidToName={uidToName}
-            brRows={brRows}
-            onChangeBrRow={handleChangeBrRow}
-            onSaveBr={handleSaveBr}
-            saving={status === 'saving'}
-            winnerText={winnerText}
-            setWinnerText={setWinnerText}
-          />
-        </section>
-      )}
-
       {selected && (
-        <EndTournamentSection
-          tournament={selected}
-          onEnded={() => { loadTournaments(); handleSelectTournament(selected.id); }}
-        />
+        <div className="space-y-6">
+          {isSingleBR && (
+            <BrResultEntry
+              tournament={selected}
+              teams={teams}
+              uidToName={uidToName}
+              brRows={brRows}
+              onChangeBrRow={handleChangeBrRow}
+              onSaveBr={handleSaveBr}
+              saving={status === 'saving'}
+              winnerText={winnerText}
+              setWinnerText={setWinnerText}
+            />
+          )}
+
+          {isBgmiTDM && (
+            <TdmResultEntry
+              tournament={selected}
+              teams={teams}
+              onSaved={() => loadTournaments()}
+            />
+          )}
+
+          {isCSorLW && (
+            <CsLwResultEntry
+              tournament={selected}
+              teams={teams}
+              onSaved={() => loadTournaments()}
+            />
+          )}
+
+          <EndTournamentSection
+            tournament={selected}
+            onEnded={() => handleSelectTournament(selected.id)}
+          />
+        </div>
       )}
     </div>
   );
