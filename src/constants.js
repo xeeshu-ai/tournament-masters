@@ -112,32 +112,21 @@ export function getGame(gameId) {
 }
 
 /**
- * BR scoring — signature: calculateBrPoints(kills, position, gameId)
+ * BR scoring formula (applies to BOTH BGMI and Free Fire):
+ *   Base   = Math.round(((kills + 1) / position) * 10)
+ *   Bonus  = 1st → +10 | 2nd → +7 | 3rd → +5 | 4th → +3 | else 0
+ *   Total  = base + bonus
  *
- * BGMI BR:
- *   Position points: #1=15, #2=12, #3=10, #4=8, #5=6, #6-#10=4, #11-#15=2, else 0
- *   Kill points: 1 per kill
- *   Total = position_pts + kills
- *
- * Free Fire BR (flat bonus system):
- *   Position bonus: #1=+10, #2=+6, #3=+4, else 0
- *   Kill points: 1 per kill
- *   Total = position_bonus + kills
+ * gameId param kept for backward-compat but no longer affects calculation.
  */
-export function calculateBrPoints(kills, position, gameId) {
+export const BR_FINISH_BONUS = { 1: 10, 2: 7, 3: 5, 4: 3 };
+
+export function calculateBrPoints(kills, position) {
   const k = Math.max(Number(kills || 0), 0);
   const p = Math.max(Number(position || 1), 1);
-
-  if (gameId === 'bgmi') {
-    const posTable = [15, 12, 10, 8, 6, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2];
-    const posPts = posTable[p - 1] ?? 0;
-    return posPts + k;
-  }
-
-  // Free Fire — position bonus: 1st=+10, 2nd=+6, 3rd=+4, rest=0
-  const ffPosTable = [10, 6, 4];
-  const ffPosPts = ffPosTable[p - 1] ?? 0;
-  return ffPosPts + k;
+  const base = Math.round(((k + 1) / p) * 10);
+  const bonus = BR_FINISH_BONUS[p] ?? 0;
+  return base + bonus;
 }
 
 export function isPowerOfTwo(n) {
