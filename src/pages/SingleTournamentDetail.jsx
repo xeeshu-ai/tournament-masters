@@ -191,6 +191,7 @@ export function SingleTournamentDetailPage() {
 
   const [brDraft, setBrDraft] = React.useState({ rows: [], lastSavedAt: null });
   const [tdmDraft, setTdmDraft] = React.useState({ rows: [] });
+  const [csDraft, setCsDraft] = React.useState({ rows: [] });
 
   const notify = (message, type = 'success') => {
     setToast({ message, type });
@@ -230,19 +231,20 @@ export function SingleTournamentDetailPage() {
     const regs = rData || [];
     setRegistrations(regs);
 
-    // Always init BR draft — works for br, squad, solo, duo, and any other mode
-    setBrDraft({
-      rows: regs.map((r) => ({
-        registration_id: r.id,
-        team_name: r.team_name,
-        kills: '',
-        position: '',
-        points: 0,
-      })),
-      lastSavedAt: null,
-    });
+    const mode = tData?.mode || '';
 
-    if (tData?.mode === 'tdm') {
+    // CS / Lone Wolf draft — kills only, winner determined by most kills
+    if (mode === 'cs' || mode === 'lone_wolf') {
+      setCsDraft({
+        rows: regs.map((r) => ({
+          registration_id: r.id,
+          team_name: r.team_name,
+          kills: '',
+        })),
+      });
+      setBrDraft({ rows: [], lastSavedAt: null });
+      setTdmDraft({ rows: [] });
+    } else if (mode === 'tdm') {
       setTdmDraft({
         rows: regs.map((r) => ({
           registration_id: r.id,
@@ -250,8 +252,22 @@ export function SingleTournamentDetailPage() {
           kills: '',
         })),
       });
+      setBrDraft({ rows: [], lastSavedAt: null });
+      setCsDraft({ rows: [] });
     } else {
+      // BR / Squad / Solo / Duo — kills + position + auto points
+      setBrDraft({
+        rows: regs.map((r) => ({
+          registration_id: r.id,
+          team_name: r.team_name,
+          kills: '',
+          position: '',
+          points: 0,
+        })),
+        lastSavedAt: null,
+      });
       setTdmDraft({ rows: [] });
+      setCsDraft({ rows: [] });
     }
 
     setLoading(false);
@@ -318,7 +334,11 @@ export function SingleTournamentDetailPage() {
     ? TOURNAMENT_TYPES.find((t) => t.id === tournament.type)?.label || tournament.type
     : '';
 
-  const isTDM = tournament?.mode === 'tdm';
+  const mode = tournament?.mode || '';
+  const isTDM = mode === 'tdm';
+  const isCS = mode === 'cs';
+  const isLW = mode === 'lone_wolf';
+  const isCSorLW = isCS || isLW;
 
   const handleChangeBrRow = (index, field, value) => {
     setBrDraft((prev) => {
@@ -365,6 +385,28 @@ export function SingleTournamentDetailPage() {
     const { error } = await supabaseAdmin.from('tournaments').update({ single_br_results: sorted }).eq('id', tournament.id);
     if (error) { notify(`Failed to save results: ${error.message}`, 'error'); return; }
     notify('TDM results posted to players.');
+    setHasUnsavedResults(false);
+  };
+
+  const handleChangeCsRow = (index, value) => {
+    setCsDraft((prev) => {
+      const nextRows = [...prev.rows];
+      nextRows[index] = { ...nextRows[index], kills: value };
+      return { rows: nextRows };
+    });
+    setHasUnsavedResults(true);
+  };
+
+  const handlePublishCsResults = async () => {
+    if (!tournament || !isCSorLW) return;
+    const sorted = [...csDraft.rows].map((r) => ({
+      team_name: r.team_name,
+      kills: Number(r.kills || 0),
+    })).sort((a, b) => b.kills - a.kills);
+
+    const { error } = await supabaseAdmin.from('tournaments').update({ single_br_results: sorted }).eq('id', tournament.id);
+    if (error) { notify(`Failed to save results: ${error.message}`, 'error'); return; }
+    notify(`${isLW ? 'Lone Wolf' : 'Clash Squad'} results posted to players.`);
     setHasUnsavedResults(false);
   };
 
@@ -512,7 +554,51 @@ export function SingleTournamentDetailPage() {
       {/* Results tab */}
       {activeTab === 'results' && (
         <section className="space-y-3">
-          {isTDM ? (
+          {/* ── CS / Lone Wolf ── */}
+          {isCSorLW ? (
+            <>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-100">
+                  {isLW ? 'Lone Wolf' : 'Clash Squad'} · Result Draft
+                </h2>
+                <span className="text-[11px] text-slate-400">Kills only — highest kills wins</span>
+              </div>
+              <div className="card overflow-x-auto text-xs">
+                {csDraft.rows.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center">No teams to score yet. Confirm registrations first.</p>
+                ) : (
+                  <table className="table">
+                    <thead>
+                      <tr><th>Team</th><th>Kills</th></tr>
+                    </thead>
+                    <tbody>
+                      {csDraft.rows.map((row, idx) => (
+                        <tr key={row.registration_id}>
+                          <td className="font-semibold">{row.team_name}</td>
+                          <td>
+                            <input
+                              type="number"
+                              className="input w-24 text-xs"
+                              value={row.kills}
+                              placeholder="0"
+                              onChange={(e) => handleChangeCsRow(idx, e.target.value)}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span>{hasUnsavedResults ? 'Draft has unsaved changes.' : 'Draft is in sync.'}</span>
+                <button type="button" className="btn-primary text-xs" onClick={handlePublishCsResults} disabled={!csDraft.rows.length}>
+                  Post {isLW ? 'Lone Wolf' : 'CS'} Results
+                </button>
+              </div>
+            </>
+          ) : isTDM ? (
+            /* ── TDM ── */
             <>
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-slate-100">TDM · Result Draft</h2>
@@ -555,7 +641,7 @@ export function SingleTournamentDetailPage() {
               </div>
             </>
           ) : (
-            // BR / Squad / Solo / Duo — all handled with kills + position table
+            /* ── BR / Squad / Solo / Duo ── */
             <>
               <h2 className="text-sm font-semibold text-slate-100">Battle Royale · Result Draft</h2>
               <div className="card overflow-x-auto text-xs">
