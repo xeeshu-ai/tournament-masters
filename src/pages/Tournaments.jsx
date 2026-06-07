@@ -3,7 +3,6 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabaseAdmin } from '../supabaseClient';
 import {
   BR_SLOT_OPTIONS,
-  TDM_ROUNDS,
   BGMI_TDM_KILL_TARGET,
   TOURNAMENT_TYPES,
   getMapsForGame,
@@ -228,7 +227,8 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
       team_size: Number(form.team_size) || 1,
       // players_per_match: only stored for Free Fire BR
       players_per_match: (isBR && !isBgmi) ? Number(form.players_per_match) || null : null,
-      total_rounds: isCS || isLW || isTDM ? Number(form.total_rounds) || null : null,
+      // total_rounds: only for CS and LW — BGMI TDM uses kill_target only
+      total_rounds: isCS || isLW ? Number(form.total_rounds) || null : null,
     };
 
     let result;
