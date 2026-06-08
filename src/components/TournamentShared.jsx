@@ -40,6 +40,7 @@ export const emptyForm = {
   skills_on: false,
   limited_ammo: false,
   lw_format: '',
+  is_free: true,
   entry_fee: '',
   max_slots: '',
   prize_text: '',
@@ -82,7 +83,7 @@ export function SingleTournamentRow({ t, gameId, onEdit, onArchive, onDelete, na
       </td>
       <td className="uppercase text-slate-400">{t.mode}</td>
       <td className="text-slate-400">{t.format_label || '—'}</td>
-      <td className="text-slate-300">{t.entry_fee ? `₹${t.entry_fee}` : 'Free'}</td>
+      <td className="text-slate-300">{t.is_free ? 'Free' : t.entry_fee ? `₹${t.entry_fee}` : 'Free'}</td>
       <td className="text-slate-400">{t.max_slots ?? '—'}</td>
       <td>
         <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${REG_BADGE[t.registration_status] ?? 'bg-slate-700 text-slate-300'}`}>
@@ -139,7 +140,7 @@ export function LongTournamentCard({ t, gameId, onEdit, onArchive, onDelete, nav
           <span className="uppercase">{t.mode}</span>
           {t.format_label && <span>{t.format_label}</span>}
           {t.map && <span>{t.map}</span>}
-          <span>{t.entry_fee ? `₹${t.entry_fee}` : 'Free'}</span>
+          <span>{t.is_free ? 'Free' : t.entry_fee ? `₹${t.entry_fee}` : 'Free'}</span>
           <span>{t.max_slots ?? '—'} slots</span>
           <span className="whitespace-nowrap">{fmtDate(t.start_time)}</span>
         </div>
@@ -245,7 +246,12 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   const [error, setError] = React.useState('');
 
   React.useEffect(() => {
-    setForm(initial || emptyForm);
+    // When editing an existing tournament, derive is_free from entry_fee if column missing
+    const base = initial || emptyForm;
+    setForm({
+      ...base,
+      is_free: base.is_free !== undefined ? base.is_free : (Number(base.entry_fee) === 0),
+    });
     setError('');
   }, [initial, open]);
 
@@ -255,6 +261,11 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
     const { name, value, type, checked } = e.target;
     setForm((f) => {
       const updated = { ...f, [name]: type === 'checkbox' ? checked : value };
+
+      // When switching to free, clear entry fee
+      if (name === 'is_free' && checked) {
+        updated.entry_fee = '';
+      }
 
       if (name === 'mode') {
         updated.map = '';
@@ -343,7 +354,8 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
       skills_on: isCS || isLW ? form.skills_on : false,
       limited_ammo: isCS || isLW ? form.limited_ammo : false,
       lw_format: isLW ? form.lw_format : null,
-      entry_fee: Number(form.entry_fee) || 0,
+      is_free: Boolean(form.is_free),
+      entry_fee: form.is_free ? 0 : Number(form.entry_fee) || 0,
       max_slots: Number(form.max_slots) || 0,
       prize_text: form.prize_text,
       points_table: form.points_table,
@@ -543,6 +555,35 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
               </div>
             )}
 
+            {/* ── Free / Paid toggle ── */}
+            <div>
+              <label className="label">Entry type</label>
+              <div className="flex rounded-lg overflow-hidden border border-slate-700 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, is_free: true, entry_fee: '' }))}
+                  className={`px-4 py-1.5 text-xs font-medium transition-colors ${
+                    form.is_free
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Free
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, is_free: false }))}
+                  className={`px-4 py-1.5 text-xs font-medium transition-colors ${
+                    !form.is_free
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Paid
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               {!isBR && (
                 <div>
@@ -550,10 +591,12 @@ export function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
                   <input name="max_slots" type="number" className="input" value={form.max_slots} onChange={handleChange} />
                 </div>
               )}
-              <div className={!isBR ? '' : 'col-span-2'}>
-                <label className="label">Entry fee (₹)</label>
-                <input name="entry_fee" type="number" className="input" value={form.entry_fee} onChange={handleChange} min={0} />
-              </div>
+              {!form.is_free && (
+                <div className={!isBR ? '' : 'col-span-2'}>
+                  <label className="label">Entry fee (₹)</label>
+                  <input name="entry_fee" type="number" className="input" value={form.entry_fee} onChange={handleChange} min={1} />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
