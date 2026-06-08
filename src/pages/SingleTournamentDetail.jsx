@@ -561,7 +561,25 @@ export function SingleTournamentDetailPage() {
     notify(`${modeLabel} results posted to players.`);
     setHasUnsavedResults(false);
   };
+const handleCloseEntries = async () => {
+  const { error } = await supabaseAdmin
+    .from('tournaments')
+    .update({ registration_status: 'closed' })
+    .eq('id', tournament.id);
+  if (error) { notify('Failed to close entries.', 'error'); return; }
+  notify('Entries closed. No new registrations allowed.');
+  load();
+};
 
+const handleOpenEntries = async () => {
+  const { error } = await supabaseAdmin
+    .from('tournaments')
+    .update({ registration_status: 'open' })
+    .eq('id', tournament.id);
+  if (error) { notify('Failed to re-open entries.', 'error'); return; }
+  notify('Entries are open again.');
+  load();
+};
   const handleEndTournament = async () => {
     if (!tournament) return;
     const { error } = await supabaseAdmin.from('tournaments').update({ status: 'ended', registration_status: 'closed' }).eq('id', tournament.id);
@@ -611,10 +629,31 @@ export function SingleTournamentDetailPage() {
             </div>
           </div>
           <div className="flex flex-col items-stretch gap-2 text-xs min-w-[200px]">
-            <button type="button" className="btn-secondary" onClick={() => setFormOpen(true)} disabled={loading || !tournament}>Edit</button>
-            <button type="button" className="btn-secondary" onClick={() => setConfirmArchive({ open: true })} disabled={!tournament}>Archive</button>
-            <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => setConfirmDelete({ open: true, title: tournament?.title })} disabled={!tournament}>Delete permanently</button>
-          </div>
+  <button type="button" className="btn-secondary" onClick={() => setFormOpen(true)} disabled={loading || !tournament}>Edit</button>
+
+  {tournament?.registration_status === 'open' ? (
+    <button
+      type="button"
+      className="rounded-lg bg-amber-700/30 text-amber-300 hover:bg-amber-700/50 border border-amber-700/40 text-xs font-semibold px-3 py-2 transition-colors"
+      onClick={handleCloseEntries}
+      disabled={!tournament}
+    >
+      🔒 Close Entries
+    </button>
+  ) : (
+    <button
+      type="button"
+      className="rounded-lg bg-emerald-700/30 text-emerald-300 hover:bg-emerald-700/50 border border-emerald-700/40 text-xs font-semibold px-3 py-2 transition-colors"
+      onClick={handleOpenEntries}
+      disabled={!tournament}
+    >
+      🔓 Re-open Entries
+    </button>
+  )}
+
+  <button type="button" className="btn-secondary" onClick={() => setConfirmArchive({ open: true })} disabled={!tournament}>Archive</button>
+  <button type="button" className="text-[11px] rounded px-2 py-1 bg-red-900/40 text-red-400 hover:bg-red-800/60 transition-colors" onClick={() => setConfirmDelete({ open: true, title: tournament?.title })} disabled={!tournament}>Delete permanently</button>
+</div>
         </div>
       </header>
 
