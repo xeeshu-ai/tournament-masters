@@ -12,7 +12,6 @@ function fmtDate(str) {
 }
 
 function StatusPill({ status }) {
-  // Only two meaningful states now: joined (paid) or removed (rejected)
   const isRemoved = status === 'rejected';
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
@@ -23,13 +22,13 @@ function StatusPill({ status }) {
   );
 }
 
-// ─── Team Card (collapsible) ──────────────────────────────────────────────────
+// ─── Team Card (collapsible) ────────────────────────────────────────────────────
 function TeamCard({ reg, idx, onRemove }) {
   const [open, setOpen] = React.useState(false);
 
-  const members = (reg.members || []).sort((a, b) => a.slot - b.slot);
+  const members    = (reg.members || []).sort((a, b) => a.slot - b.slot);
   const totalMembers = members.length;
-  const isRemoved = reg.status === 'rejected';
+  const isRemoved  = reg.status === 'rejected';
 
   return (
     <div className={`rounded-xl border border-slate-800 bg-slate-900/60 text-xs overflow-hidden ${isRemoved ? 'opacity-50' : ''}`}>
@@ -108,12 +107,14 @@ function TeamCard({ reg, idx, onRemove }) {
   );
 }
 
-// ─── Tournament Section (collapsible) ────────────────────────────────────────
+// ─── Tournament Section (collapsible) ─────────────────────────────────────────────────
 function TournamentSection({ tournament, registrations, onToggle }) {
   const [open, setOpen] = React.useState(true);
   const total   = registrations.length;
   const joined  = registrations.filter((r) => r.status !== 'rejected').length;
   const removed = registrations.filter((r) => r.status === 'rejected').length;
+  const maxSlots = Number(tournament.max_slots) || 0;
+  const isFull   = maxSlots > 0 && joined >= maxSlots;
 
   return (
     <div className="card space-y-0">
@@ -128,8 +129,13 @@ function TournamentSection({ tournament, registrations, onToggle }) {
             {tournament.mode?.toUpperCase()} · {tournament.format_label}
           </span>
           <span className="rounded-full bg-emerald-900/50 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
-            {joined} joined
+            {joined}{maxSlots > 0 ? `/${maxSlots}` : ''} joined
           </span>
+          {isFull && (
+            <span className="rounded-full bg-amber-900/50 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+              FULL
+            </span>
+          )}
           {removed > 0 && (
             <span className="rounded-full bg-red-900/40 px-2 py-0.5 text-[11px] font-semibold text-red-400">
               {removed} removed
@@ -164,7 +170,7 @@ function TournamentSection({ tournament, registrations, onToggle }) {
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────────────────────────
 export function RegistrationsPage() {
   const { gameId } = useParams();
 
@@ -177,7 +183,7 @@ export function RegistrationsPage() {
 
   const notify = (msg, type = 'success') => {
     setToast({ message: msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
   const load = React.useCallback(async () => {
@@ -272,8 +278,30 @@ export function RegistrationsPage() {
   React.useEffect(() => { load(); }, [load]);
 
   // Toggle registration: remove (→ rejected) or restore (→ confirmed)
+  // Slot cap: block restore if tournament is already full
   const handleToggleRegistration = async (reg) => {
     const newStatus = reg.status === 'rejected' ? 'confirmed' : 'rejected';
+
+    // ── Slot cap check on restore ──
+    if (newStatus === 'confirmed') {
+      const tournament = tournaments.find((t) => t.id === reg.tournament_id);
+      const maxSlots = Number(tournament?.max_slots) || 0;
+
+      if (maxSlots > 0) {
+        const currentActive = (regsByTournament[reg.tournament_id] || [])
+          .filter((r) => r.id !== reg.id && r.status !== 'rejected')
+          .length;
+
+        if (currentActive >= maxSlots) {
+          notify(
+            `Cannot restore — tournament is full (${currentActive}/${maxSlots} slots taken).`,
+            'error'
+          );
+          return;
+        }
+      }
+    }
+
     const { error } = await supabaseAdmin
       .from('tournament_registrations')
       .update({ status: newStatus })
@@ -308,7 +336,7 @@ export function RegistrationsPage() {
       );
     });
 
-  const allRegs    = Object.values(regsByTournament).flat();
+  const allRegs     = Object.values(regsByTournament).flat();
   const totalJoined = allRegs.filter((r) => r.status !== 'rejected').length;
 
   return (
