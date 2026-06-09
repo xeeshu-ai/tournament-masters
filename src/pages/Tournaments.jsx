@@ -58,7 +58,6 @@ const emptyForm = {
   max_slots: '',
   prize_text: '',
   points_table: '',
-  entry_closing_time: '',
   match_start_time: '',
   youtube_live_url: '',
   registration_status: 'open',
@@ -167,12 +166,9 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
   };
 
   const validate = () => {
-    if (!form.entry_closing_time || !form.match_start_time) {
-      return 'Both entry closing time and match start time are required.';
+    if (!form.match_start_time) {
+      return 'Match start time is required.';
     }
-    const closing = new Date(form.entry_closing_time);
-    const start = new Date(form.match_start_time);
-    if (closing >= start) return 'Entry closing time must be before match start time.';
     if (form.mode === 'br') {
       if (!form.team_size) return 'Select team size for BR.';
       if (!isBgmi && !form.players_per_match) return 'Select players per match for BR.';
@@ -219,7 +215,6 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
       max_slots: Number(form.max_slots) || 0,
       prize_text: form.prize_text,
       points_table: form.points_table,
-      entry_closing_time: form.entry_closing_time || null,
       start_time: form.match_start_time || null,
       youtube_live_url: form.youtube_live_url || null,
       registration_status: form.registration_status,
@@ -477,12 +472,8 @@ function TournamentForm({ open, onClose, initial, onSaved, gameId }) {
             <textarea id="points_table" name="points_table" rows={3} className="input resize-none" value={form.points_table} onChange={handleChange} />
           </div>
 
-          {/* Times */}
-          <div>
-            <label className="label" htmlFor="entry_closing_time">Entry closing time</label>
-            <input id="entry_closing_time" name="entry_closing_time" type="datetime-local" className="input" value={form.entry_closing_time} onChange={handleChange} required />
-          </div>
-          <div>
+          {/* Match start time only */}
+          <div className="md:col-span-2">
             <label className="label" htmlFor="match_start_time">Match start time</label>
             <input id="match_start_time" name="match_start_time" type="datetime-local" className="input" value={form.match_start_time} onChange={handleChange} required />
           </div>
