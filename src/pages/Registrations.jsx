@@ -221,8 +221,7 @@ export function RegistrationsPage() {
         team_name,
         status,
         created_at,
-        razorpay_order_id,
-        payment_id,
+      
         registration_members (
           slot,
           game_uid,
